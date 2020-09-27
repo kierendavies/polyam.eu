@@ -1,8 +1,10 @@
 import collections
 import os
 import pprint
+import sys
 import sqlite3
 import time
+import traceback
 import typing
 
 import discord
@@ -11,8 +13,9 @@ import graphviz
 
 
 class Bot(commands.Bot):
-    async def on_command_error(self, ctx, error):
-        await ctx.send(f"Something went wrong :slight_frown:\n```\n{str(error)}\n```")
+    async def on_command_error(self, ctx, exception):
+        await ctx.send(f"Something went wrong :slight_frown:\n```\n{str(exception)}\n```")
+        traceback.print_exception(type(exception), exception, exception.__traceback__, file=sys.stderr)
 
 
 class Connections(commands.Cog):
@@ -119,28 +122,45 @@ class Connections(commands.Cog):
         dist = {member.id: 0}
         queue = collections.deque([member.id])
         while queue:
-            from_user_id = queue.popleft()
-            if from_user_id not in edges:
-                edges[from_user_id] = {}
+            user_id = queue.popleft()
+            if user_id not in edges:
+                edges[user_id] = {}
 
-            connections = db.execute(
+            # Outbound connections
+            connections_out = db.execute(
                 "select to_user_id, annotation from connections where guild_id = ? and from_user_id = ?",
                 (
                     ctx.guild.id,
-                    from_user_id,
+                    user_id,
                 )
             ).fetchall()
-
-            for (to_user_id, annotation) in connections:
-                d = dist.get(to_user_id, dist[from_user_id] + 1)
+            for (to_user_id, annotation) in connections_out:
+                d = dist.get(to_user_id, dist[user_id] + 1)
                 if d > radius:
                     continue
-
-                edges[from_user_id][to_user_id] = annotation
-
+                edges[user_id][to_user_id] = annotation
                 if to_user_id not in dist:
                     dist[to_user_id] = d
                     queue.append(to_user_id)
+
+            # Inbound connections
+            connections_in = db.execute(
+                "select from_user_id, annotation from connections where guild_id = ? and to_user_id = ?",
+                (
+                    ctx.guild.id,
+                    user_id,
+                )
+            ).fetchall()
+            for (from_user_id, annotation) in connections_in:
+                d = dist.get(from_user_id, dist[user_id] + 1)
+                if d > radius:
+                    continue
+                if from_user_id not in edges:
+                    edges[from_user_id] = {}
+                edges[from_user_id][user_id] = annotation
+                if from_user_id not in dist:
+                    dist[from_user_id] = d
+                    queue.append(from_user_id)
 
         font_name = "sans-serif"
         graph = graphviz.Digraph(
@@ -160,32 +180,30 @@ class Connections(commands.Cog):
             },
         )
 
-        for from_user_id in edges:
-            member = ctx.guild.get_member(from_user_id)
+        for user_id in edges:
+            member = ctx.guild.get_member(user_id)
             graph.node(
-                str(from_user_id),
+                str(user_id),
                 label=member.display_name if member else "",
             )
 
-            for to_user_id in edges[from_user_id]:
+            for to_user_id in edges[user_id]:
                 bidirectional = False
-                if to_user_id in edges and from_user_id in edges[to_user_id]:
+                if to_user_id in edges and user_id in edges[to_user_id]:
                     # Only add one instance of each bidirectional edge.
-                    if to_user_id < from_user_id:
+                    if to_user_id < user_id:
                         continue
                     bidirectional = True
 
                 graph.edge(
-                    str(from_user_id),
+                    str(user_id),
                     str(to_user_id),
                     **Connections.edge_attrs(
-                        edges[from_user_id][to_user_id],
-                        edges[to_user_id].get(from_user_id),
+                        edges[user_id][to_user_id],
+                        edges[to_user_id].get(user_id),
                         bidirectional,
                     ),
                 )
-
-        print(graph.source)
 
         out_file = graph.render(cleanup=True)
         await ctx.send(file=discord.File(out_file))
