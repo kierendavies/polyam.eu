@@ -235,6 +235,7 @@ class Connections(commands.Cog):
         elif "friend" in (annotation, back_annotation):
             attrs["style"] = "dotted"
             attrs["arrowhead"] = "none"
+            attrs["len"] = "2"
         elif bidirectional:
             attrs["dir"] = "both"
             attrs["arrowhead"] = "none"
