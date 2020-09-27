@@ -224,21 +224,24 @@ class Connections(commands.Cog):
         attrs = {}
 
         if "cohab" in (annotation, back_annotation):
+            attrs["dir"] = "none"
             attrs["penwidth"] = "3"
-            attrs["arrowhead"] = "none"
         elif "fwb" in (annotation, back_annotation):
-            attrs["arrowhead"] = "none"
+            attrs["dir"] = "none"
         elif "crush" in (annotation, back_annotation):
             attrs["style"] = "dashed"
-            if bidirectional:
+            if annotation == back_annotation:
                 attrs["dir"] = "both"
+            elif annotation == "crush":
+                attrs["dir"] = "forward"
+            else:
+                attrs["dir"] = "back"
         elif "friend" in (annotation, back_annotation):
+            attrs["dir"] = "none"
             attrs["style"] = "dotted"
-            attrs["arrowhead"] = "none"
             attrs["len"] = "2"
         elif bidirectional:
-            attrs["dir"] = "both"
-            attrs["arrowhead"] = "none"
+            attrs["dir"] = "none"
 
         return attrs
 
