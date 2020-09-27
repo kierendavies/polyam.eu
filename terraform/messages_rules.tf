@@ -1,37 +1,41 @@
 resource discord_message rules {
   channel_id = discord_text_channel.rules.id
-  # content    = "This is a message"
-  embed {
-    title = "Rules"
-    description = <<-END
-      Click the :white_check_mark: below this message to agree to these rules and gain access to the rest of the server.
+  content = <<-EOT
+    Click the :white_check_mark: below this message to agree to these rules and gain access to the rest of the server.
 
-      1. You must be at least 18 years old to be a member of this server.
-      2. Always follow the Code of Conduct.
-      3. Speak English in the common channels.
-    END
-  }
+    **Rules**
+
+    1. You must be at least 18 years old to be a member of this server.
+    2. Always follow the Code of Conduct.
+    3. Speak English in the common channels.
+  EOT
   depends_on = [discord_text_channel.rules]
+}
+
+resource discord_message rules_blank {
+  channel_id = discord_text_channel.rules.id
+  content = "_ _\n_ _"
+  depends_on = [discord_message.rules]
 }
 
 resource discord_message code_of_conduct_pledge {
   channel_id = discord_text_channel.rules.id
   embed {
     title = "Code of Conduct - Our Pledge"
-    description = <<-END
+    description = <<-EOT
       We as members and leaders pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
       We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
-    END
+    EOT
   }
-  depends_on = [discord_message.rules]
+  depends_on = [discord_message.rules_blank]
 }
 
 resource discord_message code_of_conduct_standards {
   channel_id = discord_text_channel.rules.id
   embed {
     title = "Code of Conduct - Our Standards"
-    description = <<-END
+    description = <<-EOT
       Examples of behavior that contributes to a positive environment for our community include:
       • Demonstrating empathy and kindness toward other people
       • Being respectful of differing opinions, viewpoints, and experiences
@@ -45,7 +49,7 @@ resource discord_message code_of_conduct_standards {
       • Public or private harassment
       • Publishing others’ private information, such as a physical or email address, without their explicit permission
       • Other conduct which could reasonably be considered inappropriate
-    END
+    EOT
   }
   depends_on = [discord_message.code_of_conduct_pledge]
 }
@@ -54,7 +58,7 @@ resource discord_message code_of_conduct_enforcement {
   channel_id = discord_text_channel.rules.id
   embed {
     title = "Code of Conduct - Enforcement"
-    description = <<-END
+    description = <<-EOT
       Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
 
       Community leaders have the right and responsibility to remove messages that are not aligned to this Code of Conduct, and will communicate reasons for moderation decisions when appropriate.
@@ -62,16 +66,16 @@ resource discord_message code_of_conduct_enforcement {
       Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders in the #deleted-channel channel. All complaints will be reviewed and investigated promptly and fairly.
 
       All community leaders are obligated to respect the privacy and security of the reporter of any incident.
-    END
+    EOT
   }
-  depends_on = [discord_message.code_of_conduct_pledge]
+  depends_on = [discord_message.code_of_conduct_standards]
 }
 
 resource discord_message code_of_conduct_enforcement_guidelines {
   channel_id = discord_text_channel.rules.id
   embed {
     title = "Code of Conduct - Enforcement Guidelines"
-    description = <<-END
+    description = <<-EOT
       Community leaders will follow these Community Impact Guidelines in determining the consequences for any action they deem in violation of this Code of Conduct:
 
       1. _Correction_
@@ -89,7 +93,7 @@ resource discord_message code_of_conduct_enforcement_guidelines {
       4. _Permanent Ban_
       Community Impact: Demonstrating a pattern of violation of community standards, including sustained inappropriate behavior, harassment of an individual, or aggression toward or disparagement of classes of individuals.
       Consequence: A permanent ban from any sort of public interaction within the community.
-    END
+    EOT
   }
   depends_on = [discord_message.code_of_conduct_enforcement]
 }
@@ -98,9 +102,9 @@ resource discord_message code_of_conduct_attribution {
   channel_id = discord_text_channel.rules.id
   embed {
     title = "Code of Conduct - Attribution"
-    description = <<-END
+    description = <<-EOT
       This Code of Conduct is adapted from the Contributor Covenant, version 2.0, available at https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
-    END
+    EOT
   }
   depends_on = [discord_message.code_of_conduct_enforcement_guidelines]
 }
