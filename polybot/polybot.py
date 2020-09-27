@@ -114,14 +114,14 @@ class Connections(commands.Cog):
         if member is None:
             member = ctx.author
 
-        nodes = set()
-        edges = collections.defaultdict(dict)
+        edges = {}
 
         dist = {member.id: 0}
         queue = collections.deque([member.id])
         while queue:
             from_user_id = queue.popleft()
-            nodes.add(from_user_id)
+            if from_user_id not in edges:
+                edges[from_user_id] = {}
 
             connections = db.execute(
                 "select to_user_id, annotation from connections where guild_id = ? and from_user_id = ?",
@@ -160,35 +160,60 @@ class Connections(commands.Cog):
             },
         )
 
-        for user_id in nodes:
-            member = ctx.guild.get_member(user_id)
+        for from_user_id in edges:
+            member = ctx.guild.get_member(from_user_id)
             graph.node(
-                str(user_id),
+                str(from_user_id),
                 label=member.display_name if member else "",
             )
 
-        for from_user_id in edges:
             for to_user_id in edges[from_user_id]:
+                bidirectional = False
                 if to_user_id in edges and from_user_id in edges[to_user_id]:
-                    # Draw a bidirectional edge, but only for one of the directions.
+                    # Only add one instance of each bidirectional edge.
                     if to_user_id < from_user_id:
                         continue
-                    graph.edge(
-                        str(from_user_id),
-                        str(to_user_id),
-                        arrowhead="none",
-                    )
-                else:
-                    graph.edge(
-                        str(from_user_id),
-                        str(to_user_id),
-                    )
+                    bidirectional = True
+
+                graph.edge(
+                    str(from_user_id),
+                    str(to_user_id),
+                    **Connections.edge_attrs(
+                        edges[from_user_id][to_user_id],
+                        edges[to_user_id].get(from_user_id),
+                        bidirectional,
+                    ),
+                )
 
         print(graph.source)
 
         out_file = graph.render(cleanup=True)
         await ctx.send(file=discord.File(out_file))
         os.remove(out_file)
+
+    @staticmethod
+    def edge_attrs(annotation, back_annotation=None, bidirectional=False):
+        # For available attributes, see http://graphviz.org/doc/info/attrs.html
+
+        attrs = {}
+
+        if "cohab" in (annotation, back_annotation):
+            attrs["penwidth"] = "3"
+            attrs["arrowhead"] = "none"
+        elif "fwb" in (annotation, back_annotation):
+            attrs["arrowhead"] = "none"
+        elif "crush" in (annotation, back_annotation):
+            attrs["style"] = "dashed"
+            if bidirectional:
+                attrs["dir"] = "both"
+        elif "friend" in (annotation, back_annotation):
+            attrs["style"] = "dotted"
+            attrs["arrowhead"] = "none"
+        elif bidirectional:
+            attrs["dir"] = "both"
+            attrs["arrowhead"] = "none"
+
+        return attrs
 
 
 if __name__ == "__main__":
