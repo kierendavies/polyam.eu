@@ -181,10 +181,18 @@ class Connections(commands.Cog):
         )
 
         for user_id in edges:
-            member = ctx.guild.get_member(user_id)
+            node_member = ctx.guild.get_member(user_id)
+            node_attrs = {
+                "label": "",
+            }
+            if node_member:
+                node_attrs["label"] = node_member.display_name
+                if node_member.id == member.id:
+                    node_attrs["peripheries"] = "2"
+                    node_attrs["color"] = "black:black"
             graph.node(
                 str(user_id),
-                label=member.display_name if member else "",
+                **node_attrs,
             )
 
             for to_user_id in edges[user_id]:
