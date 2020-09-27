@@ -251,7 +251,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--token")
-    parser.add_argument("--db", default="polybot.db")
+    parser.add_argument("--db", default="polly.db")
     parser.add_argument("--out-dir", default="out")
     args = parser.parse_args()
 
