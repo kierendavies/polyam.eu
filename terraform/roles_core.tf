@@ -1,7 +1,6 @@
 resource discord_role_everyone everyone {
   server_id   = discord_server.server.id
   permissions = data.discord_permission.read_only.allow_bits
-  depends_on  = [discord_server.server]
 }
 
 resource discord_role admin {
@@ -10,7 +9,6 @@ resource discord_role admin {
   permissions = data.discord_permission.allow_all.allow_bits
   hoist       = true
   mentionable = true
-  depends_on  = [discord_server.server]
 }
 
 resource discord_member_roles admin {
@@ -23,7 +21,6 @@ resource discord_member_roles admin {
   role {
     role_id = discord_role.admin.id
   }
-  depends_on = [discord_role.admin]
 }
 
 resource discord_role member {
@@ -32,12 +29,10 @@ resource discord_role member {
   permissions = data.discord_permission.read_only.allow_bits
   hoist       = true
   mentionable = false
-  depends_on  = [discord_server.server]
 }
 
 resource discord_role verified {
   server_id   = discord_server.server.id
   name        = "verified"
   mentionable = false
-  depends_on  = [discord_server.server]
 }
