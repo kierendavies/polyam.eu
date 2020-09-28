@@ -1,21 +1,34 @@
+import argparse
 import collections
+import logging
 import os
 import pprint
-import sys
 import sqlite3
+import sys
 import time
 import traceback
 import typing
 
 import discord
-from discord.ext import commands
 import graphviz
+from discord.ext import commands
+
+
+log = logging.getLogger("polly")
 
 
 class Bot(commands.Bot):
+    async def on_command(self, ctx):
+        log.debug(
+            f"command name={repr(ctx.command.name)}"
+            f" guild={repr(ctx.guild.name)}"
+            f" user={repr(str(ctx.author))}"
+            f" raw={repr(ctx.message.content)}"
+        )
+
     async def on_command_error(self, ctx, exception):
         await ctx.send(f"Something went wrong :slight_frown:\n```\n{str(exception)}\n```")
-        traceback.print_exception(type(exception), exception, exception.__traceback__, file=sys.stderr)
+        log.debug("command error", exc_info=exception)
 
 
 class Connections(commands.Cog):
@@ -247,7 +260,8 @@ class Connections(commands.Cog):
 
 
 if __name__ == "__main__":
-    import argparse
+    logging.basicConfig(level=logging.INFO)
+    log.setLevel(logging.DEBUG)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--token")
