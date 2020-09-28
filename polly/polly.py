@@ -35,7 +35,7 @@ class Bot(commands.Bot):
         except:
             can_run = False
         log.debug(
-            f"command name={repr(ctx.command.name)}"
+            f"command name={repr(ctx.command.qualified_name)}"
             f" guild={repr(ctx.guild.name if ctx.guild else None)}"
             f" user={repr(str(ctx.author))}"
             f" can_run={can_run}"
