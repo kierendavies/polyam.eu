@@ -18,11 +18,27 @@ log = logging.getLogger("polly")
 
 
 class Bot(commands.Bot):
+    def __init__(self):
+        super().__init__(self.when_mentioned_or_dm)
+
+    @staticmethod
+    def when_mentioned_or_dm(bot, message):
+        if message.guild is None:
+            # Allow empty prefix in DM.
+            return commands.when_mentioned(bot, message) + [""]
+        else:
+            return commands.when_mentioned(bot, message)
+
     async def on_command(self, ctx):
+        try:
+            can_run = await ctx.command.can_run(ctx)
+        except:
+            can_run = False
         log.debug(
             f"command name={repr(ctx.command.name)}"
-            f" guild={repr(ctx.guild.name)}"
+            f" guild={repr(ctx.guild.name if ctx.guild else None)}"
             f" user={repr(str(ctx.author))}"
+            f" can_run={can_run}"
             f" raw={repr(ctx.message.content)}"
         )
 
@@ -52,6 +68,12 @@ class Connections(commands.Cog):
                     primary key (guild_id, from_user_id, to_user_id)
                 )
             """)
+
+    @commands.guild_only()
+    async def cog_check(self, ctx):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        return True
 
     @commands.command()
     async def connect(self, ctx: commands.Context, member: discord.Member, annotation: typing.Optional[str] = None):
@@ -269,7 +291,7 @@ if __name__ == "__main__":
     parser.add_argument("--out-dir", default="out")
     args = parser.parse_args()
 
-    bot = Bot(commands.when_mentioned)
+    bot = Bot()
     db = sqlite3.connect(args.db)
     bot.add_cog(Connections(bot, db, args.out_dir))
 
