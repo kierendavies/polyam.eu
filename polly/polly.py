@@ -69,7 +69,6 @@ class Connections(commands.Cog):
                 )
             """)
 
-    @commands.guild_only()
     async def cog_check(self, ctx):
         if ctx.guild is None:
             raise commands.NoPrivateMessage()
