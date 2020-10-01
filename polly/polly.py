@@ -106,7 +106,7 @@ class Connections(commands.Cog):
                     member.id, ctx.author.id,
                 )
             ).rowcount
-        await ctx.send(f"Removed {n} connection(s)")
+        await ctx.send(f"Removed {n} connection(s) from {ctx.author.mention}")
 
     @commands.command()
     async def disconnect_all(self, ctx: commands.Context):
@@ -125,7 +125,7 @@ class Connections(commands.Cog):
                     ctx.author.id,
                 )
             ).rowcount
-        await ctx.send(f"Removed {n} connection(s)")
+        await ctx.send(f"Removed {n} connection(s) from {ctx.author.mention}")
 
     @commands.command(hidden=True)
     @commands.has_guild_permissions(ban_members=True)
