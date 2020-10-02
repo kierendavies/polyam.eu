@@ -8,6 +8,47 @@ import graphviz
 from discord.ext import commands
 
 
+# In order of precedence.
+edge_styles = [
+    ("cohab", {
+        "dir": "none",
+        "penwidth": "3",
+    }),
+    ("fwb", {
+        "dir": "none",
+    }),
+    ("crush", {
+        "style": "dashed",
+    }),
+    ("friend", {
+        "dir": "none",
+        "style": "dotted",
+        "len": "2",
+    }),
+]
+
+def edge_attrs(annotation, back_annotation=None, bidirectional=False):
+    # For available attributes, see http://graphviz.org/doc/info/attrs.html
+    attrs = {}
+
+    for (ann, style_attrs) in edge_styles:
+        if ann in (annotation, back_annotation):
+            attrs.update(style_attrs)
+            break
+
+    if "crush" in (annotation, back_annotation):
+        if annotation == back_annotation:
+            attrs["dir"] = "both"
+        elif annotation == "crush":
+            attrs["dir"] = "forward"
+        else:
+            attrs["dir"] = "back"
+    elif bidirectional:
+        attrs["dir"] = "none"
+
+    return attrs
+
+
 class Connections(commands.Cog):
     def __init__(self, bot, db_conn, out_dir):
         self.bot = bot
@@ -201,7 +242,7 @@ class Connections(commands.Cog):
                 graph.edge(
                     str(user_id),
                     str(to_user_id),
-                    **Connections.edge_attrs(
+                    **edge_attrs(
                         edges[user_id][to_user_id],
                         edges[to_user_id].get(user_id),
                         bidirectional,
@@ -211,31 +252,3 @@ class Connections(commands.Cog):
         out_file = graph.render(cleanup=True)
         await ctx.send(file=discord.File(out_file))
         os.remove(out_file)
-
-    @staticmethod
-    def edge_attrs(annotation, back_annotation=None, bidirectional=False):
-        # For available attributes, see http://graphviz.org/doc/info/attrs.html
-
-        attrs = {}
-
-        if "cohab" in (annotation, back_annotation):
-            attrs["dir"] = "none"
-            attrs["penwidth"] = "3"
-        elif "fwb" in (annotation, back_annotation):
-            attrs["dir"] = "none"
-        elif "crush" in (annotation, back_annotation):
-            attrs["style"] = "dashed"
-            if annotation == back_annotation:
-                attrs["dir"] = "both"
-            elif annotation == "crush":
-                attrs["dir"] = "forward"
-            else:
-                attrs["dir"] = "back"
-        elif "friend" in (annotation, back_annotation):
-            attrs["dir"] = "none"
-            attrs["style"] = "dotted"
-            attrs["len"] = "2"
-        elif bidirectional:
-            attrs["dir"] = "none"
-
-        return attrs
