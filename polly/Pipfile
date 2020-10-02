@@ -7,7 +7,7 @@ verify_ssl = true
 autopep8 = "*"
 
 [packages]
-"discord.py" = "~=1.4"
+"discord.py" = "~=1.5"
 graphviz = "~=0.14"
 
 [requires]
