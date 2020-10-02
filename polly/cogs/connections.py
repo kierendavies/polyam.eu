@@ -1,4 +1,5 @@
 import collections
+import logging
 import os
 import time
 import typing
@@ -7,6 +8,8 @@ import discord
 import graphviz
 from discord.ext import commands
 
+
+log = logging.getLogger("polly")
 
 # In order of precedence.
 edge_styles = [
@@ -217,15 +220,25 @@ class Connections(commands.Cog):
         )
 
         for user_id in edges:
-            node_member = ctx.guild.get_member(user_id)
             node_attrs = {
                 "label": "",
             }
-            if node_member:
-                node_attrs["label"] = node_member.display_name
-                if node_member.id == member.id:
+
+            user = ctx.guild.get_member(user_id)
+
+            # Something is wrong with the user cache. It should populate from
+            # guild events, but as a fallback we sometimes have to make the
+            # API request directly.
+            if user is None:
+                log.warn(f"falling back to fetch_user for {user_id}")
+                user = await ctx.bot.fetch_user(user_id)
+
+            if user is not None:
+                node_attrs["label"] = user.display_name
+                if user.id == member.id:
                     node_attrs["peripheries"] = "2"
                     node_attrs["color"] = "black:black"
+
             graph.node(
                 str(user_id),
                 **node_attrs,
