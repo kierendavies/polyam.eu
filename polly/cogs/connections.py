@@ -1,6 +1,7 @@
 import collections
 import logging
 import os
+import textwrap
 import time
 import typing
 
@@ -29,6 +30,7 @@ edge_styles = [
         "len": "2",
     }),
 ]
+
 
 def edge_attrs(annotation, back_annotation=None, bidirectional=False):
     # For available attributes, see http://graphviz.org/doc/info/attrs.html
@@ -79,7 +81,17 @@ class Connections(commands.Cog):
             raise commands.NoPrivateMessage()
         return True
 
-    @commands.command()
+    @commands.command(
+        brief="Add a connection between you and someone else in this server",
+        help=textwrap.dedent("""
+            Add a connection between you and someone else in this server.
+
+            The annotation can be any text, but there are some special values which are processed by the graph command:
+            {}
+        """).strip().format(
+            "\n".join(s[0] for s in edge_styles),
+        ),
+    )
     async def connect(self, ctx: commands.Context, member: discord.Member, annotation: typing.Optional[str] = None):
         with self.db_conn:
             self.db_conn.execute(
@@ -93,7 +105,7 @@ class Connections(commands.Cog):
             )
         await ctx.send(f"New connection between {ctx.author.mention} and {member.mention}")
 
-    @commands.command()
+    @commands.command(help="Remove a connection between you and someone else in this server")
     async def disconnect(self, ctx: commands.Context, member: discord.Member):
         with self.db_conn:
             n = self.db_conn.execute(
@@ -112,7 +124,7 @@ class Connections(commands.Cog):
             ).rowcount
         await ctx.send(f"Removed {n} connection(s) from {ctx.author.mention}")
 
-    @commands.command()
+    @commands.command(help="Remove all your connections in this server")
     async def disconnect_all(self, ctx: commands.Context):
         with self.db_conn:
             n = self.db_conn.execute(
@@ -151,7 +163,7 @@ class Connections(commands.Cog):
             ).rowcount
         await ctx.send(f"Removed {n} connection(s)")
 
-    @commands.command()
+    @commands.command(help="Draw a graph of connections")
     async def graph(self, ctx: commands.Context, member: typing.Optional[discord.Member] = None, radius: int = 1):
         if member is None:
             member = ctx.author
