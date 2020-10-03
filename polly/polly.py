@@ -45,7 +45,11 @@ class Bot(commands.Bot):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="{asctime} {levelname} {name} {message}",
+        style="{",
+    )
     log.setLevel(logging.DEBUG)
 
     parser = argparse.ArgumentParser()
