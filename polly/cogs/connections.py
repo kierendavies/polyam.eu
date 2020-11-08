@@ -55,8 +55,7 @@ def edge_attrs(annotation, back_annotation=None, bidirectional=False):
 
 
 class Connections(commands.Cog):
-    def __init__(self, bot, db_conn, out_dir):
-        self.bot = bot
+    def __init__(self, db_conn, out_dir):
         self.db_conn = db_conn
         self.out_dir = out_dir
 

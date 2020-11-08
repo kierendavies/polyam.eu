@@ -16,7 +16,7 @@ class Bot(commands.Bot):
         self.db_conn = sqlite3.connect(db)
         self.out_dir = out_dir
 
-        self.add_cog(cogs.Connections(self, self.db_conn, self.out_dir))
+        self.add_cog(cogs.Connections(self.db_conn, self.out_dir))
 
     @staticmethod
     def when_mentioned_or_dm(bot, message):
