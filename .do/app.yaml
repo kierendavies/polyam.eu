@@ -1,0 +1,13 @@
+name: polyam-eu
+region: ams
+static_sites:
+- build_command: mv index.html static/
+  environment_slug: html
+  github:
+    branch: master
+    deploy_on_push: true
+    repo: kierendavies/polyam.eu
+  name: polyam-eu
+  output_dir: static
+  routes:
+  - path: /
