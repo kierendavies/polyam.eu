@@ -1,3 +1,7 @@
+domains:
+- domain: polyam.eu
+  type: PRIMARY
+  zone: polyam.eu
 name: polyam-eu
 region: ams
 static_sites:
