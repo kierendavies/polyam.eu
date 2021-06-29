@@ -15,4 +15,4 @@ class Bubblewrap(commands.Cog):
             for y in range(size)
         )
 
-        await ctx.send(format_users(text))
+        await ctx.send(text)
