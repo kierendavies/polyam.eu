@@ -595,7 +595,6 @@ dependencies = [
  "once_cell",
  "rand",
  "serenity",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",

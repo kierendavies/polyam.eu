@@ -25,7 +25,6 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     #[tracing::instrument(skip_all)]
-    // #[tracing::instrument(skip(self, ctx))]
     async fn ready(&self, ctx: Context, ready: Ready) {
         info!(?ready);
 
@@ -50,21 +49,8 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         info!(?interaction, "interaction_create");
 
-        match &interaction {
-            Interaction::Ping(_) => error!("Unhandled ping"),
-
-            Interaction::ApplicationCommand(command_interaction) => {
-                info!("");
-                if let Err(error) =
-                    EnabledCommands::handle_command_interaction(ctx, command_interaction).await
-                {
-                    error!(%error);
-                }
-            }
-
-            Interaction::MessageComponent(_) => todo!(),
-            Interaction::Autocomplete(_) => todo!(),
-            Interaction::ModalSubmit(_) => todo!(),
+        if let Err(error) = EnabledCommands::handle_interaction(ctx, &interaction).await {
+            error!(?error, "Error handling interaction");
         }
     }
 }
