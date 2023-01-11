@@ -1,5 +1,6 @@
 pub mod bubblewrap;
 
+use anyhow::Result;
 use serenity::async_trait;
 use serenity::builder::CreateApplicationCommand;
 use serenity::json::Value;
@@ -7,41 +8,16 @@ use serenity::model::prelude::interaction::application_command::ApplicationComma
 use serenity::model::prelude::interaction::InteractionResponseType;
 use serenity::prelude::Context;
 use serenity::prelude::SerenityError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CommandError {
+    #[error("Interaction not handled")]
     InteractionNotHandled,
+    #[error("Invalid option {0:?}: {1:?}")]
     OptionInvalid(&'static str, Option<Value>),
+    #[error("Missing option {0:?}")]
     OptionMissing(&'static str),
-    Serenity(SerenityError),
-}
-
-impl std::fmt::Display for CommandError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CommandError::InteractionNotHandled => write!(f, "Interaction not handled"),
-            CommandError::OptionInvalid(name, value) => {
-                write!(f, "Option invalid: {name} => {value:?}")
-            }
-            CommandError::OptionMissing(name) => write!(f, "Option missing: {name}"),
-            CommandError::Serenity(inner) => inner.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for CommandError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CommandError::Serenity(inner) => Some(inner),
-            _ => None,
-        }
-    }
-}
-
-impl From<SerenityError> for CommandError {
-    fn from(value: SerenityError) -> CommandError {
-        CommandError::Serenity(value)
-    }
 }
 
 #[async_trait]
@@ -57,7 +33,7 @@ pub trait Command {
         &self,
         ctx: Context,
         interaction: &ApplicationCommandInteraction,
-    ) -> Result<(), CommandError>;
+    ) -> Result<()>;
 }
 
 macro_rules! enabled_commands_impl {
@@ -73,7 +49,7 @@ macro_rules! enabled_commands_impl {
         async fn handle_command_interaction(
             ctx: serenity::prelude::Context,
             interaction: &serenity::model::prelude::interaction::application_command::ApplicationCommandInteraction,
-        ) -> Result<(), crate::commands::CommandError> {
+        ) -> anyhow::Result<()> {
             use crate::commands::Command;
             match interaction.data.name.as_str() {
                 $(
@@ -81,7 +57,7 @@ macro_rules! enabled_commands_impl {
                         .handle_command_interaction(ctx, interaction)
                         .await,
                 )*
-                _ => Err(crate::commands::CommandError::InteractionNotHandled),
+                _ => Err(crate::commands::CommandError::InteractionNotHandled)?,
             }
         }
     };
@@ -93,16 +69,22 @@ macro_rules! option_value {
         match $options.iter().find(|opt| opt.name == $name) {
             Some(opt) => match opt.resolved {
                 Some($type(value)) => Ok(value),
-                _ => Err(Error::OptionInvalid($name, opt.value.clone())),
+                _ => Err(crate::commands::CommandError::OptionInvalid(
+                    $name,
+                    opt.value.clone(),
+                )),
             },
-            None => Err(Error::OptionMissing($name)),
+            None => Err(crate::commands::CommandError::OptionMissing($name)),
         }
     };
     ($options:expr, $name:expr, $type:path, $default:expr) => {
         match $options.iter().find(|opt| opt.name == $name) {
             Some(opt) => match opt.resolved {
                 Some($type(value)) => Ok(value),
-                _ => Err(CommandError::OptionInvalid($name, opt.value.clone())),
+                _ => Err(crate::commands::CommandError::OptionInvalid(
+                    $name,
+                    opt.value.clone(),
+                )),
             },
             None => Ok($default),
         }

@@ -1,7 +1,7 @@
 use super::option_value;
 use super::respond_with_content;
 use super::Command;
-use super::CommandError;
+use anyhow::Result;
 use once_cell::sync::Lazy;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
@@ -50,7 +50,7 @@ impl Command for Bubblewrap {
         &self,
         ctx: Context,
         interaction: &ApplicationCommandInteraction,
-    ) -> Result<(), CommandError> {
+    ) -> Result<()> {
         let size = option_value!(
             interaction.data.options,
             OPT_SIZE,
