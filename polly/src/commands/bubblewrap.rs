@@ -1,28 +1,22 @@
-use super::option_value;
 use super::respond_with_content;
 use super::Command;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
-use rand::Rng;
 use serenity::async_trait;
 use serenity::builder::CreateApplicationCommand;
-use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::interaction::application_command::CommandDataOptionValue;
 use serenity::prelude::Context;
 
 const BUBBLES: [(&str, u32); 3] = [("🔵", 240), ("💥", 10), ("🐱", 1)];
 
-const OPT_SIZE: &str = "size";
+static DISTRIBUTION: Lazy<WeightedIndex<u32>> = Lazy::new(|| {
+    println!("init");
+    WeightedIndex::new(BUBBLES.map(|b| b.1)).unwrap()
+});
 
-fn sample_bubble<R: Rng + ?Sized>(rng: &mut R) -> &str {
-    static DISTRIBUTION: Lazy<WeightedIndex<u32>> =
-        Lazy::new(|| WeightedIndex::new(BUBBLES.map(|b| b.1)).unwrap());
-
-    BUBBLES[DISTRIBUTION.sample(rng)].0
-}
+const SIZE: u32 = 5;
 
 pub struct Bubblewrap;
 
@@ -37,13 +31,6 @@ impl Command for Bubblewrap {
         command
             .name(Self::NAME)
             .description("Sends you some bubble wrap to pop. Might contain bombs.")
-            .create_option(|opt| {
-                opt.name(OPT_SIZE)
-                    .description("Size of the square of bubbles")
-                    .kind(CommandOptionType::Integer)
-                    .min_int_value(1)
-                    .max_int_value(19)
-            })
     }
 
     async fn handle_command_interaction(
@@ -51,19 +38,13 @@ impl Command for Bubblewrap {
         ctx: Context,
         interaction: &ApplicationCommandInteraction,
     ) -> Result<()> {
-        let size = option_value!(
-            interaction.data.options,
-            OPT_SIZE,
-            CommandDataOptionValue::Integer,
-            5
-        )?;
-
         let mut text = String::new();
         {
             let mut rng = rand::thread_rng();
-            for _ in 0..size {
-                for _ in 0..size {
-                    text.push_str(&format!("||{}||", sample_bubble(&mut rng)));
+            for _ in 0..SIZE {
+                for _ in 0..SIZE {
+                    let bubble = BUBBLES[DISTRIBUTION.sample(&mut rng)].0;
+                    text.push_str(&format!("||{bubble}||"));
                 }
                 text.push('\n');
             }
