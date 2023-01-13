@@ -3,7 +3,7 @@
 mod commands;
 
 use crate::commands::bubblewrap::Bubblewrap;
-use crate::commands::enabled_commands_impl;
+use crate::commands::Command;
 use serenity::async_trait;
 use serenity::model::prelude::interaction::Interaction;
 use serenity::model::prelude::*;
@@ -14,11 +14,27 @@ use tracing::info;
 use tracing::info_span;
 use tracing::Instrument;
 
-struct EnabledCommands;
+macro_rules! enable_commands {
+    ($($command:path),*) => {
+        macro_rules! register_commands {
+            ($command_builder:expr) => {
+                $command_builder
+                    $(.create_application_command(|c| $command.create_application_command(c)))*
+            }
+        }
 
-impl EnabledCommands {
-    enabled_commands_impl!(Bubblewrap);
+        macro_rules! handle_command {
+            ($ctx:expr, $interaction:expr, $command_name:expr) => {{
+                match $command_name {
+                    $(<$command>::NAME => Some($command.handle_interaction($ctx, $interaction).await),)*
+                    _ => None,
+                }
+            }}
+        }
+    };
 }
+
+enable_commands!(Bubblewrap);
 
 struct Handler;
 
@@ -33,7 +49,7 @@ impl EventHandler for Handler {
             async {
                 let commands = guild
                     .id
-                    .set_application_commands(&ctx.http, EnabledCommands::set_application_commands)
+                    .set_application_commands(&ctx, |commands| register_commands!(commands))
                     .await
                     .unwrap();
 
@@ -47,10 +63,25 @@ impl EventHandler for Handler {
 
     #[tracing::instrument(skip_all, fields(interaction.id = %interaction.id()))]
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        info!(?interaction, "interaction_create");
+        let command_name: &str = match &interaction {
+            Interaction::ApplicationCommand(i) => &i.data.name,
+            Interaction::MessageComponent(i) => {
+                let Some(message_interaction) = &i.message.interaction else {
+                    error!(?interaction, "Message interaction is missing");
+                    return;
+                };
+                &message_interaction.name
+            }
+            _ => {
+                error!(?interaction, "Interaction type not handled");
+                return;
+            }
+        };
 
-        if let Err(error) = EnabledCommands::handle_interaction(ctx, &interaction).await {
-            error!(?error, "Error handling interaction");
+        match handle_command!(ctx, &interaction, command_name) {
+            Some(Ok(_)) => info!(command_name, "Handled command"),
+            Some(Err(error)) => error!(%error, ?interaction),
+            None => error!(command_name, ?interaction, "Unknown command name"),
         }
     }
 }
