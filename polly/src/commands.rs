@@ -1,5 +1,6 @@
 pub mod bubblewrap;
 
+use crate::UserData;
 use anyhow::Error;
 
-type Context<'a> = poise::Context<'a, (), Error>;
+pub type Context<'a> = poise::Context<'a, UserData, Error>;

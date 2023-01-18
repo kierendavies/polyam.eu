@@ -11,6 +11,7 @@ static DISTRIBUTION: Lazy<WeightedIndex<u32>> =
 
 const SIZE: u32 = 5;
 
+/// Get some bubble wrap to pop
 #[poise::command(slash_command)]
 #[tracing::instrument(skip(ctx))]
 pub async fn bubblewrap(ctx: Context<'_>) -> Result<()> {
