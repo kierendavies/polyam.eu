@@ -293,6 +293,7 @@ fn create_intro_modal<'a, 'b>(
                                 text.custom_id(ID_ABOUT_ME)
                                     .label(LABEL_ABOUT_ME)
                                     .style(InputTextStyle::Paragraph)
+                                    .placeholder("I like long walks on the beach... 🏖")
                                     .required(true)
                                     .min_length(50);
                                 if let Some(intro_fields) = intro_fields {
@@ -306,6 +307,7 @@ fn create_intro_modal<'a, 'b>(
                                 text.custom_id(ID_POLYAMORY_EXPERIENCE)
                                     .label(LABEL_POLYAMORY_EXPERIENCE)
                                     .style(InputTextStyle::Paragraph)
+                                    .placeholder("It's okay if you have none 💕")
                                     .required(true);
                                 if let Some(intro_fields) = intro_fields {
                                     text.value(intro_fields.polyamory_experience);
