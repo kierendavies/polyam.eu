@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::future::Future;
 
+use crate::bail;
 use crate::config::GuildConfig;
+use crate::Error;
 use crate::FrameworkContext;
-use anyhow::bail;
-use anyhow::ensure;
+use crate::Result;
 use anyhow::Context as _;
-use anyhow::Error;
-use anyhow::Result;
 use poise::futures_util::future;
 use poise::futures_util::StreamExt;
 use poise::futures_util::TryStreamExt;
@@ -104,15 +103,17 @@ impl<'a> TryFrom<&'a Message> for IntroFields<'a> {
     }
 }
 
+#[tracing::instrument(skip(framework))]
 fn guild_config(framework: FrameworkContext<'_>, guild_id: GuildId) -> Result<&GuildConfig> {
-    framework
+    Ok(framework
         .user_data
         .config
         .guilds
         .get(&guild_id)
-        .context("No config for guild")
+        .context("No config for guild")?)
 }
 
+#[tracing::instrument(skip(ctx, f))]
 async fn find_message<Fut, F>(
     ctx: &Context,
     channel_id: ChannelId,
@@ -122,7 +123,6 @@ async fn find_message<Fut, F>(
 where
     Fut: Future<Output = bool> + Send,
     F: FnMut(&Message) -> Fut + Send,
-    // F: Fn(&Message) -> bool + Send,
 {
     let message = channel_id
         .messages_iter(ctx)
@@ -140,6 +140,7 @@ where
     Ok(message)
 }
 
+#[tracing::instrument(skip_all)]
 async fn quarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Result<()> {
     member.add_role(ctx, role_id).await?;
     info!(
@@ -151,6 +152,7 @@ async fn quarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Resu
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 async fn unquarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Result<()> {
     member.remove_role(ctx, role_id).await?;
     info!(
@@ -189,6 +191,7 @@ fn create_welcome_message<'a, 'b>(
     })
 }
 
+#[tracing::instrument(skip_all)]
 async fn send_welcome_message(
     ctx: &Context,
     channel_id: ChannelId,
@@ -205,16 +208,17 @@ async fn send_welcome_message(
     let guild = member.guild_id.to_partial_guild(ctx).await?;
 
     let perms = guild.user_permissions_in(&channel, member)?;
-    ensure!(
-        perms.contains(Permissions::VIEW_CHANNEL),
-        "Missing VIEW_CHANNEL permission: guild.id={}, guild.name={:?}, channel.id={}, channel.name={:?}, member.user.id={}, member.user.tag={:?}",
-        guild.id,
-        guild.name,
-        channel.id,
-        channel.name,
-        member.user.id,
-        member.user.tag(),
-    );
+    if !perms.contains(Permissions::VIEW_CHANNEL) {
+        bail!(
+            "Missing VIEW_CHANNEL permission: guild.id={}, guild.name={:?}, channel.id={}, channel.name={:?}, member.user.id={}, member.user.tag={:?}",
+            guild.id,
+            guild.name,
+            channel.id,
+            channel.name,
+            member.user.id,
+            member.user.tag(),
+        );
+    }
 
     let message = channel
         .id
@@ -226,6 +230,7 @@ async fn send_welcome_message(
     Ok(message)
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_welcome_message(
     ctx: &Context,
     bot_id: UserId,
@@ -338,6 +343,7 @@ fn create_intro_embed<'a>(
     embed
 }
 
+#[tracing::instrument(skip_all)]
 async fn send_intro_message(
     ctx: &Context,
     channel_id: ChannelId,
@@ -354,6 +360,7 @@ async fn send_intro_message(
     Ok(message)
 }
 
+#[tracing::instrument(skip_all)]
 async fn find_intro_message(
     ctx: &Context,
     bot_id: UserId,
@@ -370,6 +377,7 @@ async fn find_intro_message(
     .await
 }
 
+#[tracing::instrument(skip_all)]
 async fn edit_intro_message(
     ctx: &Context,
     message: &mut Message,
@@ -384,6 +392,7 @@ async fn edit_intro_message(
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 async fn edit_or_send_intro_message(
     ctx: &Context,
     bot_id: UserId,
@@ -399,6 +408,7 @@ async fn edit_or_send_intro_message(
     }
 }
 
+#[tracing::instrument(skip_all)]
 async fn submit_intro_quarantined(
     ctx: &Context,
     bot_id: UserId,
@@ -442,6 +452,7 @@ async fn submit_intro_quarantined(
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 async fn submit_intro_slash(
     ctx: &Context,
     bot_id: UserId,
@@ -482,12 +493,12 @@ async fn submit_intro_slash(
 }
 
 #[tracing::instrument(
-    skip_all,
     fields(
         %member.guild_id,
         %member.user.id,
         member.user.tag = member.user.tag(),
     ),
+    skip_all,
 )]
 pub async fn guild_member_addition(
     ctx: &Context,
@@ -504,7 +515,6 @@ pub async fn guild_member_addition(
 }
 
 #[tracing::instrument(
-    skip_all,
     fields(
         %interaction.id,
         interaction.guild_id = %interaction.guild_id.unwrap_or_default(),
@@ -512,6 +522,7 @@ pub async fn guild_member_addition(
         interaction.user.tag = interaction.user.tag(),
         interaction.data.custom_id,
     ),
+    skip_all,
 )]
 pub async fn message_component_interaction(
     ctx: &Context,
@@ -534,7 +545,6 @@ pub async fn message_component_interaction(
 }
 
 #[tracing::instrument(
-    skip_all,
     fields(
         %interaction.id,
         interaction.guild_id = %interaction.guild_id.unwrap_or_default(),
@@ -542,6 +552,7 @@ pub async fn message_component_interaction(
         interaction.user.tag = interaction.user.tag(),
         interaction.data.custom_id,
     ),
+    skip_all,
 )]
 pub async fn modal_submit_interaction(
     ctx: &Context,
@@ -578,14 +589,13 @@ pub async fn modal_submit_interaction(
 /// Edit your introduction
 #[poise::command(slash_command)]
 #[tracing::instrument(
-    name = "intro",
-    skip(ctx),
     fields(
         ctx.id = ctx.id(),
         ctx.guild_id = %ctx.guild_id().unwrap_or_default(),
         ctx.author.id = %ctx.author().id,
         ctx.author.tag = ?ctx.author().tag(),
     ),
+    skip(ctx),
 )]
 pub async fn intro(ctx: crate::commands::Context<'_>) -> Result<()> {
     let poise::Context::Application(app_ctx) = ctx else {
