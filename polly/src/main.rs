@@ -113,7 +113,8 @@ async fn main() {
             tracing_subscriber::EnvFilter::builder()
                 .with_default_directive(tracing::metadata::LevelFilter::INFO.into())
                 .from_env_lossy()
-                .add_directive("polly=trace".parse().unwrap()),
+                .add_directive("polly=trace".parse().unwrap())
+                .add_directive("serenity::gateway::shard=warn".parse().unwrap()),
         )
         .finish()
         .with(tracing_error::ErrorLayer::default())
