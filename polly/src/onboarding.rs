@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::future::Future;
 
-use crate::bail;
+use crate::commands::CommandContext;
 use crate::config::GuildConfig;
-use crate::Error;
+use crate::error::bail;
+use crate::error::Error;
+use crate::error::Result;
 use crate::FrameworkContext;
-use crate::Result;
 use anyhow::Context as _;
 use poise::futures_util::future;
 use poise::futures_util::StreamExt;
@@ -597,7 +598,7 @@ pub async fn modal_submit_interaction(
     ),
     skip(ctx),
 )]
-pub async fn intro(ctx: crate::commands::Context<'_>) -> Result<()> {
+pub async fn intro(ctx: CommandContext<'_>) -> Result<()> {
     let poise::Context::Application(app_ctx) = ctx else {
         bail!("Expected ApplicationContext");
     };

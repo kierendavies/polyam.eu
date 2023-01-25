@@ -1,80 +1,39 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::missing_errors_doc)]
 
 mod commands;
-mod config;
+pub mod config;
+mod error;
 mod onboarding;
 
 use crate::commands::bubblewrap::bubblewrap;
 use crate::config::Config;
+// use crate::error::Error;
+// use crate::error::Result;
+use anyhow::Context as _;
+use async_trait::async_trait;
 use poise::serenity_prelude::Context;
 use poise::serenity_prelude::GatewayIntents;
 use poise::serenity_prelude::Interaction;
-use std::fmt;
+use shuttle_secrets::SecretStore;
 use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::error;
 use tracing::warn;
-use tracing_error::SpanTrace;
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-
-#[derive(thiserror::Error)]
-pub struct Error {
-    source: anyhow::Error,
-    span_trace: SpanTrace,
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.source.fmt(f)?;
-        write!(f, "\n\nSpan trace:\n")?;
-        fmt::Display::fmt(&self.span_trace, f)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.source.fmt(f)
-    }
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(error: anyhow::Error) -> Self {
-        Error {
-            source: error,
-            span_trace: SpanTrace::capture(),
-        }
-    }
-}
-
-impl From<serenity::Error> for Error {
-    fn from(error: serenity::Error) -> Self {
-        Error {
-            source: error.into(),
-            span_trace: SpanTrace::capture(),
-        }
-    }
-}
-
-macro_rules! bail {
-    ($($args:tt)*) => {
-        return Err(anyhow::anyhow!($($args)*).into())
-    };
-}
-pub(crate) use bail;
-
-type Result<T> = core::result::Result<T, Error>;
 
 pub struct UserData {
     config: Config,
 }
 
-type FrameworkContext<'a> = poise::FrameworkContext<'a, UserData, Error>;
+type Framework = poise::Framework<UserData, crate::error::Error>;
+type FrameworkContext<'a> = poise::FrameworkContext<'a, UserData, crate::error::Error>;
 
 async fn handle_event(
     ctx: &Context,
     framework: FrameworkContext<'_>,
     event: &poise::Event<'_>,
-) -> Result<()> {
+) -> crate::error::Result<()> {
     match event {
         poise::Event::GuildMemberAddition { new_member } => {
             onboarding::guild_member_addition(ctx, framework, new_member).await?;
@@ -105,25 +64,9 @@ async fn handle_event(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt()
-        .pretty()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .with_default_directive(tracing::metadata::LevelFilter::INFO.into())
-                .from_env_lossy()
-                .add_directive("polly=trace".parse().unwrap())
-                .add_directive("serenity::gateway::shard=warn".parse().unwrap()),
-        )
-        .finish()
-        .with(tracing_error::ErrorLayer::default())
-        .init();
-
-    let config: Config = toml::from_str(&fs::read_to_string("polly.toml").unwrap()).unwrap();
-
+pub async fn bot_framework(token: String, config: Config) -> crate::error::Result<Arc<Framework>> {
     let framework = poise::Framework::builder()
-        .token(std::env::var("DISCORD_TOKEN").expect("Error reading DISCORD_TOKEN"))
+        .token(token)
         .intents(GatewayIntents::GUILD_MEMBERS)
         .setup(|ctx, ready, framework| {
             Box::pin(async move {
@@ -163,7 +106,44 @@ async fn main() {
                 Box::pin(async move { handle_event(ctx, framework, event).await })
             },
             ..Default::default()
-        });
+        })
+        .build()
+        .await?;
 
-    framework.run().await.unwrap();
+    Ok(framework)
+}
+
+struct Service {
+    framework: Arc<Framework>,
+}
+
+#[async_trait]
+impl shuttle_service::Service for Service {
+    async fn bind(
+        self: Box<Self>,
+        _addr: std::net::SocketAddr,
+    ) -> Result<(), shuttle_service::error::Error> {
+        self.framework.start().await.context("bind")?;
+
+        Ok(())
+    }
+}
+
+#[shuttle_service::main]
+async fn service(
+    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
+) -> core::result::Result<Service, shuttle_service::Error> {
+    let token = secret_store
+        .get("DISCORD_TOKEN")
+        .context("Getting DISCORD_TOKEN")?;
+
+    let config: Config = toml::from_str(&fs::read_to_string(static_folder.join("polly.toml"))?)
+        .context("Parsing config")?;
+
+    let framework = bot_framework(token, config)
+        .await
+        .context("Creating framework")?;
+
+    Ok(Service { framework })
 }

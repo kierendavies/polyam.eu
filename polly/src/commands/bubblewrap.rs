@@ -1,5 +1,5 @@
-use crate::commands::Context;
-use crate::Result;
+use crate::commands::CommandContext;
+use crate::error::Result;
 use once_cell::sync::Lazy;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
@@ -14,7 +14,7 @@ const SIZE: u32 = 5;
 /// Get some bubble wrap to pop
 #[poise::command(slash_command)]
 #[tracing::instrument(skip(ctx))]
-pub async fn bubblewrap(ctx: Context<'_>) -> Result<()> {
+pub async fn bubblewrap(ctx: CommandContext<'_>) -> Result<()> {
     let mut text = String::new();
     {
         let mut rng = rand::thread_rng();
