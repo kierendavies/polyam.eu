@@ -8,8 +8,6 @@ mod onboarding;
 
 use crate::commands::bubblewrap::bubblewrap;
 use crate::config::Config;
-// use crate::error::Error;
-// use crate::error::Result;
 use anyhow::Context as _;
 use async_trait::async_trait;
 use poise::serenity_prelude::Context;
@@ -122,7 +120,7 @@ impl shuttle_service::Service for Service {
     async fn bind(
         self: Box<Self>,
         _addr: std::net::SocketAddr,
-    ) -> Result<(), shuttle_service::error::Error> {
+    ) -> core::result::Result<(), shuttle_service::error::Error> {
         self.framework.start().await.context("bind")?;
 
         Ok(())
