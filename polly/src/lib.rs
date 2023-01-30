@@ -9,11 +9,11 @@ mod onboarding;
 use crate::commands::bubblewrap::bubblewrap;
 use crate::config::Config;
 use anyhow::Context as _;
-use async_trait::async_trait;
 use poise::serenity_prelude::Context;
 use poise::serenity_prelude::GatewayIntents;
 use poise::serenity_prelude::Interaction;
 use shuttle_secrets::SecretStore;
+use shuttle_service::ShuttlePoise;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -111,27 +111,11 @@ pub async fn bot_framework(token: String, config: Config) -> crate::error::Resul
     Ok(framework)
 }
 
-struct Service {
-    framework: Arc<Framework>,
-}
-
-#[async_trait]
-impl shuttle_service::Service for Service {
-    async fn bind(
-        self: Box<Self>,
-        _addr: std::net::SocketAddr,
-    ) -> core::result::Result<(), shuttle_service::error::Error> {
-        self.framework.start().await.context("bind")?;
-
-        Ok(())
-    }
-}
-
 #[shuttle_service::main]
 async fn service(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
-) -> core::result::Result<Service, shuttle_service::Error> {
+) -> ShuttlePoise<UserData, crate::error::Error> {
     let token = secret_store
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;
@@ -143,5 +127,5 @@ async fn service(
         .await
         .context("Creating framework")?;
 
-    Ok(Service { framework })
+    Ok(framework)
 }
