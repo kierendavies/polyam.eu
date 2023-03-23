@@ -12,8 +12,8 @@ use anyhow::Context as _;
 use poise::serenity_prelude::Context;
 use poise::serenity_prelude::GatewayIntents;
 use poise::serenity_prelude::Interaction;
+use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
-use shuttle_service::ShuttlePoise;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -111,8 +111,8 @@ pub async fn bot_framework(token: String, config: Config) -> crate::error::Resul
     Ok(framework)
 }
 
-#[shuttle_service::main]
-async fn service(
+#[shuttle_runtime::main]
+async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
 ) -> ShuttlePoise<UserData, crate::error::Error> {
@@ -127,5 +127,5 @@ async fn service(
         .await
         .context("Creating framework")?;
 
-    Ok(framework)
+    Ok(framework.into())
 }
