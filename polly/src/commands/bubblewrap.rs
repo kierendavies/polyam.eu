@@ -1,8 +1,7 @@
-use crate::commands::CommandContext;
-use crate::error::Result;
 use once_cell::sync::Lazy;
-use rand::distributions::WeightedIndex;
-use rand::prelude::Distribution;
+use rand::{distributions::WeightedIndex, prelude::Distribution};
+
+use crate::{commands::CommandContext, error::Result};
 
 const BUBBLES: [(&str, u32); 3] = [("🔵", 240), ("💥", 10), ("🐱", 1)];
 

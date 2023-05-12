@@ -6,20 +6,16 @@ pub mod config;
 mod error;
 mod onboarding;
 
-use crate::commands::bubblewrap::bubblewrap;
-use crate::config::Config;
+use std::{fs, path::PathBuf, sync::Arc};
+
 use anyhow::Context as _;
-use poise::serenity_prelude::Context;
-use poise::serenity_prelude::GatewayIntents;
-use poise::serenity_prelude::Interaction;
+use poise::serenity_prelude::{Context, GatewayIntents, Interaction};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use sqlx::PgPool;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tracing::error;
-use tracing::warn;
+use tracing::{error, warn};
+
+use crate::{commands::bubblewrap::bubblewrap, config::Config};
 
 pub struct UserData {
     config: Config,

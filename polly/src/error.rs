@@ -1,4 +1,5 @@
 use std::fmt;
+
 use tracing_error::SpanTrace;
 
 #[derive(thiserror::Error)]

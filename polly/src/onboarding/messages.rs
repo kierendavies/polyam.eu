@@ -1,27 +1,22 @@
 use anyhow::Context as _;
 use http::StatusCode;
-use poise::serenity_prelude::ChannelId;
-use poise::serenity_prelude::GuildId;
-use poise::serenity_prelude::Message;
-use poise::serenity_prelude::User;
-use poise::serenity_prelude::UserId;
-use serenity::builder::CreateEmbed;
-use serenity::builder::CreateMessage;
-use serenity::builder::EditMessage;
-use serenity::model::guild::Member;
-use serenity::model::Permissions;
-use serenity::prelude::Context;
+use poise::serenity_prelude::{ChannelId, GuildId, Message, User, UserId};
+use serenity::{
+    builder::{CreateEmbed, CreateMessage, EditMessage},
+    model::{guild::Member, Permissions},
+    prelude::Context,
+};
 use sqlx::PgPool;
 
-use crate::error::bail;
-use crate::error::Result;
-
-use super::cache;
-use super::IntroFields;
-use super::ID_INTRO_QUARANTINE;
-use super::LABEL_ABOUT_ME;
-use super::LABEL_INTRODUCE_YOURSELF;
-use super::LABEL_POLYAMORY_EXPERIENCE;
+use super::{
+    cache,
+    IntroFields,
+    ID_INTRO_QUARANTINE,
+    LABEL_ABOUT_ME,
+    LABEL_INTRODUCE_YOURSELF,
+    LABEL_POLYAMORY_EXPERIENCE,
+};
+use crate::error::{bail, Result};
 
 fn create_welcome_message<'a, 'b>(
     guild_name: &str,

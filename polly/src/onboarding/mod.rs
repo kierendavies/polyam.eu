@@ -1,36 +1,38 @@
 mod cache;
 mod messages;
 
-use crate::commands::CommandContext;
-use crate::config::GuildConfig;
-use crate::error::bail;
-use crate::error::Error;
-use crate::error::Result;
-use crate::onboarding::messages::get_intro_message;
-use crate::FrameworkContext;
-use anyhow::Context as _;
-use poise::serenity_prelude::ActionRowComponent;
-use poise::serenity_prelude::ChannelId;
-use poise::serenity_prelude::Context;
-use poise::serenity_prelude::CreateInteractionResponse;
-use poise::serenity_prelude::GuildId;
-use poise::serenity_prelude::InputTextStyle;
-use poise::serenity_prelude::InteractionResponseType;
-use poise::serenity_prelude::Member;
-use poise::serenity_prelude::Message;
-use poise::serenity_prelude::MessageComponentInteraction;
-use poise::serenity_prelude::ModalSubmitInteraction;
-use poise::serenity_prelude::RoleId;
-use poise::serenity_prelude::User;
-use poise::ApplicationCommandOrAutocompleteInteraction;
-use sqlx::PgPool;
 use std::collections::HashMap;
-use tracing::info;
-use tracing::warn;
 
-use self::messages::delete_welcome_message;
-use self::messages::edit_or_send_intro_message;
-use self::messages::send_welcome_message;
+use anyhow::Context as _;
+use poise::{
+    serenity_prelude::{
+        ActionRowComponent,
+        ChannelId,
+        Context,
+        CreateInteractionResponse,
+        GuildId,
+        InputTextStyle,
+        InteractionResponseType,
+        Member,
+        Message,
+        MessageComponentInteraction,
+        ModalSubmitInteraction,
+        RoleId,
+        User,
+    },
+    ApplicationCommandOrAutocompleteInteraction,
+};
+use sqlx::PgPool;
+use tracing::{info, warn};
+
+use self::messages::{delete_welcome_message, edit_or_send_intro_message, send_welcome_message};
+use crate::{
+    commands::CommandContext,
+    config::GuildConfig,
+    error::{bail, Error, Result},
+    onboarding::messages::get_intro_message,
+    FrameworkContext,
+};
 
 pub const ID_PREFIX: &str = "onboarding_";
 

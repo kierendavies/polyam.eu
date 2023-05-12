@@ -1,10 +1,8 @@
-use poise::serenity_prelude::ChannelId;
-use poise::serenity_prelude::GuildId;
-use poise::serenity_prelude::RoleId;
-use serde::de;
-use serde::Deserialize as _;
-use serde_derive::Deserialize;
 use std::collections::BTreeMap;
+
+use poise::serenity_prelude::{ChannelId, GuildId, RoleId};
+use serde::{de, Deserialize as _};
+use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
