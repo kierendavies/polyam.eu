@@ -18,10 +18,10 @@ serenity = { version = "0.11", default-features = false, features = [
     "rustls_backend",
     "model",
 ] }
-shuttle-poise = "*"
-shuttle-runtime = "0.12"
-shuttle-secrets = "*"
-shuttle-static-folder = "*"
+shuttle-poise = "0.16"
+shuttle-runtime = "0.16"
+shuttle-secrets = "0.16"
+shuttle-static-folder = "0.16"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 toml = "0.5"
