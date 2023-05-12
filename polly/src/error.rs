@@ -44,8 +44,9 @@ macro_rules! error_from {
 }
 
 error_from!(serenity::Error);
-error_from!(toml::de::Error);
+error_from!(sqlx::Error);
 error_from!(std::io::Error);
+error_from!(toml::de::Error);
 
 pub type Result<T> = core::result::Result<T, Error>;
 

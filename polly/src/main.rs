@@ -14,6 +14,7 @@ use poise::serenity_prelude::GatewayIntents;
 use poise::serenity_prelude::Interaction;
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
+use sqlx::PgPool;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use tracing::warn;
 
 pub struct UserData {
     config: Config,
+    db: PgPool,
 }
 
 type Framework = poise::Framework<UserData, crate::error::Error>;
@@ -35,6 +37,14 @@ async fn handle_event(
     match event {
         poise::Event::GuildMemberAddition { new_member } => {
             onboarding::guild_member_addition(ctx, framework, new_member).await?;
+        }
+
+        poise::Event::GuildMemberRemoval {
+            guild_id,
+            user,
+            member_data_if_available: _,
+        } => {
+            onboarding::guild_member_removal(ctx, framework, guild_id, user).await?;
         }
 
         poise::Event::InteractionCreate {
@@ -62,7 +72,11 @@ async fn handle_event(
     Ok(())
 }
 
-pub async fn bot_framework(token: String, config: Config) -> crate::error::Result<Arc<Framework>> {
+pub async fn bot_framework(
+    token: String,
+    config: Config,
+    db: PgPool,
+) -> crate::error::Result<Arc<Framework>> {
     let framework = poise::Framework::builder()
         .token(token)
         .intents(GatewayIntents::GUILD_MEMBERS)
@@ -76,7 +90,7 @@ pub async fn bot_framework(token: String, config: Config) -> crate::error::Resul
                     )
                     .await?;
                 }
-                Ok(UserData { config })
+                Ok(UserData { config, db })
             })
         })
         .options(poise::FrameworkOptions {
@@ -115,6 +129,7 @@ pub async fn bot_framework(token: String, config: Config) -> crate::error::Resul
 async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
+    #[shuttle_shared_db::Postgres] db: PgPool,
 ) -> ShuttlePoise<UserData, crate::error::Error> {
     let token = secret_store
         .get("DISCORD_TOKEN")
@@ -123,7 +138,12 @@ async fn shuttle_main(
     let config: Config = toml::from_str(&fs::read_to_string(static_folder.join("polly.toml"))?)
         .context("Parsing config")?;
 
-    let framework = bot_framework(token, config)
+    sqlx::migrate!()
+        .run(&db)
+        .await
+        .context("Migrating database")?;
+
+    let framework = bot_framework(token, config, db)
         .await
         .context("Creating framework")?;
 

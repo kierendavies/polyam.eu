@@ -1,22 +1,18 @@
-use std::collections::HashMap;
-use std::future::Future;
+mod cache;
+mod messages;
 
 use crate::commands::CommandContext;
 use crate::config::GuildConfig;
 use crate::error::bail;
 use crate::error::Error;
 use crate::error::Result;
+use crate::onboarding::messages::get_intro_message;
 use crate::FrameworkContext;
 use anyhow::Context as _;
-use poise::futures_util::future;
-use poise::futures_util::StreamExt;
-use poise::futures_util::TryStreamExt;
 use poise::serenity_prelude::ActionRowComponent;
 use poise::serenity_prelude::ChannelId;
 use poise::serenity_prelude::Context;
-use poise::serenity_prelude::CreateEmbed;
 use poise::serenity_prelude::CreateInteractionResponse;
-use poise::serenity_prelude::CreateMessage;
 use poise::serenity_prelude::GuildId;
 use poise::serenity_prelude::InputTextStyle;
 use poise::serenity_prelude::InteractionResponseType;
@@ -24,14 +20,17 @@ use poise::serenity_prelude::Member;
 use poise::serenity_prelude::Message;
 use poise::serenity_prelude::MessageComponentInteraction;
 use poise::serenity_prelude::ModalSubmitInteraction;
-use poise::serenity_prelude::Permissions;
 use poise::serenity_prelude::RoleId;
-use poise::serenity_prelude::Timestamp;
 use poise::serenity_prelude::User;
-use poise::serenity_prelude::UserId;
 use poise::ApplicationCommandOrAutocompleteInteraction;
+use sqlx::PgPool;
+use std::collections::HashMap;
 use tracing::info;
 use tracing::warn;
+
+use self::messages::delete_welcome_message;
+use self::messages::edit_or_send_intro_message;
+use self::messages::send_welcome_message;
 
 pub const ID_PREFIX: &str = "onboarding_";
 
@@ -114,33 +113,6 @@ fn guild_config(framework: FrameworkContext<'_>, guild_id: GuildId) -> Result<&G
         .context("No config for guild")?)
 }
 
-#[tracing::instrument(skip(ctx, f))]
-async fn find_message<Fut, F>(
-    ctx: &Context,
-    channel_id: ChannelId,
-    after: Option<Timestamp>,
-    f: F,
-) -> Result<Option<Message>>
-where
-    Fut: Future<Output = bool> + Send,
-    F: FnMut(&Message) -> Fut + Send,
-{
-    let message = channel_id
-        .messages_iter(ctx)
-        .try_take_while(|message| {
-            future::ok(match after {
-                Some(after) => message.timestamp >= after,
-                None => true,
-            })
-        })
-        .try_filter(f)
-        .boxed()
-        .try_next()
-        .await?;
-
-    Ok(message)
-}
-
 #[tracing::instrument(skip_all)]
 async fn quarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Result<()> {
     member.add_role(ctx, role_id).await?;
@@ -162,123 +134,6 @@ async fn unquarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Re
         member.user.tag = member.user.tag(),
         "Unquarantined member"
     );
-    Ok(())
-}
-
-fn create_welcome_message<'a, 'b>(
-    guild_name: &str,
-    member: &Member,
-    message: &'b mut CreateMessage<'a>,
-) -> &'b mut CreateMessage<'a> {
-    let content = format!(
-        "Welcome to {guild_name}, {member}! Please introduce yourself before you can start chatting.\n\
-        \n\
-        **Rules**\n\
-        1. **DM = BAN**. This server is not for dating or hookups.\n\
-        2. You must be at least 18 years old.\n\
-        3. Always follow the Code of Conduct, available at https://polyam.eu/coc.html.\n\
-        4. Speak English in the common channels."
-    );
-
-    message.content(content).components(|components| {
-        components.create_action_row(|row| {
-            row.create_button(|button| {
-                button
-                    .custom_id(ID_INTRO_QUARANTINE)
-                    .label(LABEL_INTRODUCE_YOURSELF)
-                    .emoji('👋')
-            })
-        })
-    })
-}
-
-#[tracing::instrument(skip_all)]
-async fn send_welcome_message(
-    ctx: &Context,
-    channel_id: ChannelId,
-    member: &Member,
-) -> Result<Message> {
-    let channel = channel_id
-        .to_channel(ctx)
-        .await?
-        .guild()
-        .context("Not a guild channel")?;
-
-    assert!(channel.guild_id == member.guild_id);
-
-    let guild = member.guild_id.to_partial_guild(ctx).await?;
-
-    let perms = guild.user_permissions_in(&channel, member)?;
-    if !perms.contains(Permissions::VIEW_CHANNEL) {
-        bail!(
-            "Missing VIEW_CHANNEL permission: guild.id={}, guild.name={:?}, channel.id={}, channel.name={:?}, member.user.id={}, member.user.tag={:?}",
-            guild.id,
-            guild.name,
-            channel.id,
-            channel.name,
-            member.user.id,
-            member.user.tag(),
-        );
-    }
-
-    let message = channel
-        .id
-        .send_message(ctx, |message| {
-            create_welcome_message(&guild.name, member, message)
-        })
-        .await?;
-
-    Ok(message)
-}
-
-#[tracing::instrument(skip_all)]
-async fn delete_welcome_message(
-    ctx: &Context,
-    bot_id: UserId,
-    member: &Member,
-    message: &Message,
-) -> Result<()> {
-    fn has_intro_button(message: &Message) -> bool {
-        message
-            .components
-            .iter()
-            .flat_map(|row| row.components.iter())
-            .any(|c| match c {
-                ActionRowComponent::Button(button) => match &button.custom_id {
-                    Some(id) => id == ID_INTRO_QUARANTINE,
-                    None => false,
-                },
-                _ => false,
-            })
-    }
-
-    // If the user clicked their own button, we can directly delete the message.
-    // Otherwise we need to find the right message to delete.
-    if message.mentions_user(&member.user) {
-        message.delete(ctx).await?;
-    } else if let Some(message) = find_message(
-        ctx,
-        message.channel_id,
-        member.joined_at,
-        |message: &Message| {
-            future::ready(
-                message.author.id == bot_id
-                    && has_intro_button(message)
-                    && message.mentions_user(&member.user),
-            )
-        },
-    )
-    .await?
-    {
-        message.delete(ctx).await?;
-    } else {
-        bail!(
-            "No intro message found: member.guild_id={}, member.user.id={}, member.user.tag={:?}",
-            member.guild_id,
-            member.user.id,
-            member.user.tag(),
-        );
-    }
     Ok(())
 }
 
@@ -325,94 +180,10 @@ fn create_intro_modal<'a, 'b>(
         })
 }
 
-fn create_intro_embed<'a>(
-    user: &User,
-    intro_fields: &IntroFields,
-    embed: &'a mut CreateEmbed,
-) -> &'a mut CreateEmbed {
-    embed
-        .description(format!("{user}"))
-        .field(LABEL_ABOUT_ME, intro_fields.about_me, false)
-        .field(
-            LABEL_POLYAMORY_EXPERIENCE,
-            intro_fields.polyamory_experience,
-            false,
-        );
-    if let Some(avatar_url) = user.static_avatar_url() {
-        embed.thumbnail(avatar_url);
-    }
-    embed
-}
-
-#[tracing::instrument(skip_all)]
-async fn send_intro_message(
-    ctx: &Context,
-    channel_id: ChannelId,
-    user: &User,
-    intro_fields: &IntroFields<'_>,
-) -> Result<Message> {
-    let message = channel_id
-        .send_message(ctx, |message| {
-            message
-                .content(format!("Introduction: {user}"))
-                .embed(|embed| create_intro_embed(user, intro_fields, embed))
-        })
-        .await?;
-    Ok(message)
-}
-
-#[tracing::instrument(skip_all)]
-async fn find_intro_message(
-    ctx: &Context,
-    bot_id: UserId,
-    channel_id: ChannelId,
-    user: &User,
-) -> Result<Option<Message>> {
-    find_message(ctx, channel_id, None, |message| {
-        future::ready(
-            message.author.id == bot_id
-                && !message.embeds.is_empty()
-                && message.mentions_user(user),
-        )
-    })
-    .await
-}
-
-#[tracing::instrument(skip_all)]
-async fn edit_intro_message(
-    ctx: &Context,
-    message: &mut Message,
-    user: &User,
-    intro_fields: &IntroFields<'_>,
-) -> Result<()> {
-    message
-        .edit(ctx, |message| {
-            message.embed(|embed| create_intro_embed(user, intro_fields, embed))
-        })
-        .await?;
-    Ok(())
-}
-
-#[tracing::instrument(skip_all)]
-async fn edit_or_send_intro_message(
-    ctx: &Context,
-    bot_id: UserId,
-    channel_id: ChannelId,
-    user: &User,
-    intro_fields: &IntroFields<'_>,
-) -> Result<Message> {
-    if let Some(mut message) = find_intro_message(ctx, bot_id, channel_id, user).await? {
-        edit_intro_message(ctx, &mut message, user, intro_fields).await?;
-        Ok(message)
-    } else {
-        send_intro_message(ctx, channel_id, user, intro_fields).await
-    }
-}
-
 #[tracing::instrument(skip_all)]
 async fn submit_intro_quarantined(
     ctx: &Context,
-    bot_id: UserId,
+    db: &PgPool,
     quarantine_role_id: RoleId,
     intros_channel_id: ChannelId,
     interaction: &ModalSubmitInteraction,
@@ -426,20 +197,20 @@ async fn submit_intro_quarantined(
         })
         .await?;
 
+    let guild_id = interaction
+        .guild_id
+        .context("Interaction has no guild_id")?;
     let mut member = interaction
         .member
         .clone()
         .context("Interaction has no member")?;
-    let welcome_message = interaction
-        .message
-        .as_ref()
-        .context("Interaction has no message")?;
     let intro_fields = IntroFields::try_from(interaction)?;
 
     unquarantine(ctx, quarantine_role_id, &mut member).await?;
     edit_or_send_intro_message(
         ctx,
-        bot_id,
+        db,
+        guild_id,
         intros_channel_id,
         &interaction.user,
         &intro_fields,
@@ -448,7 +219,7 @@ async fn submit_intro_quarantined(
     interaction
         .delete_original_interaction_response(ctx)
         .await?;
-    delete_welcome_message(ctx, bot_id, &member, welcome_message).await?;
+    delete_welcome_message(ctx, db, guild_id, interaction.user.id).await?;
 
     Ok(())
 }
@@ -456,14 +227,18 @@ async fn submit_intro_quarantined(
 #[tracing::instrument(skip_all)]
 async fn submit_intro_slash(
     ctx: &Context,
-    bot_id: UserId,
+    db: &PgPool,
     intros_channel_id: ChannelId,
     interaction: &ModalSubmitInteraction,
 ) -> Result<()> {
+    let guild_id = interaction
+        .guild_id
+        .context("Interaction has no guild_id")?;
     let intro_fields = IntroFields::try_from(interaction)?;
     let message = edit_or_send_intro_message(
         ctx,
-        bot_id,
+        db,
+        guild_id,
         intros_channel_id,
         &interaction.user,
         &intro_fields,
@@ -507,10 +282,24 @@ pub async fn guild_member_addition(
     member: &Member,
 ) -> Result<()> {
     let config = guild_config(framework, member.guild_id)?;
+    let db = &framework.user_data.db;
 
     let mut member = member.clone();
     quarantine(ctx, config.quarantine_role, &mut member).await?;
-    send_welcome_message(ctx, config.quarantine_channel, &member).await?;
+    send_welcome_message(ctx, db, config.quarantine_channel, &member).await?;
+
+    Ok(())
+}
+
+pub async fn guild_member_removal(
+    ctx: &Context,
+    framework: FrameworkContext<'_>,
+    guild_id: &GuildId,
+    user: &User,
+) -> Result<()> {
+    let db = &framework.user_data.db;
+
+    delete_welcome_message(ctx, db, *guild_id, user.id).await?;
 
     Ok(())
 }
@@ -564,12 +353,13 @@ pub async fn modal_submit_interaction(
         .guild_id
         .context("Interaction has no guild_id")?;
     let config = guild_config(framework, guild_id)?;
+    let db = &framework.user_data.db;
 
     match interaction.data.custom_id.as_str() {
         ID_INTRO_QUARANTINE => {
             submit_intro_quarantined(
                 ctx,
-                framework.bot_id,
+                db,
                 config.quarantine_role,
                 config.intros_channel,
                 interaction,
@@ -578,7 +368,7 @@ pub async fn modal_submit_interaction(
         }
 
         ID_INTRO_SLASH => {
-            submit_intro_slash(ctx, framework.bot_id, config.intros_channel, interaction).await?;
+            submit_intro_slash(ctx, db, config.intros_channel, interaction).await?;
         }
 
         _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
@@ -607,13 +397,12 @@ pub async fn intro(ctx: CommandContext<'_>) -> Result<()> {
     };
 
     let guild_id = ctx.guild_id().context("Context has no guild_id")?;
-    let config = guild_config(ctx.framework(), guild_id)?;
 
-    let intro_message = find_intro_message(
+    let intro_message = get_intro_message(
         ctx.serenity_context(),
-        ctx.framework().bot_id,
-        config.intros_channel,
-        ctx.author(),
+        &ctx.data().db,
+        guild_id,
+        ctx.author().id,
     )
     .await?;
 
