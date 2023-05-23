@@ -380,7 +380,7 @@ pub async fn modal_submit_interaction(
 }
 
 /// Edit your introduction
-#[poise::command(slash_command)]
+#[poise::command(guild_only, slash_command)]
 #[tracing::instrument(
     fields(
         ctx.id = ctx.id(),
