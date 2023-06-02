@@ -1,7 +1,6 @@
 mod cache;
 mod messages;
 
-use std::collections::HashMap;
 
 use anyhow::Context as _;
 use poise::{
@@ -29,7 +28,7 @@ use self::messages::{delete_welcome_message, edit_or_send_intro_message, send_we
 use crate::{
     commands::CommandContext,
     config::GuildConfig,
-    error::{bail, Error, Result},
+    error::{bail, Result},
     onboarding::messages::get_intro_message,
     FrameworkContext,
 };
@@ -50,58 +49,49 @@ struct IntroFields<'a> {
     polyamory_experience: &'a str,
 }
 
-impl<'a> TryFrom<&'a ModalSubmitInteraction> for IntroFields<'a> {
-    type Error = Error;
+impl<'a> IntroFields<'a> {
+    fn from_fields(fields: impl Iterator<Item = (&'a str, &'a str)>) -> Result<Self> {
+        let mut about_me: Option<&str> = None;
+        let mut polyamory_experience: Option<&str> = None;
 
-    fn try_from(interaction: &'a ModalSubmitInteraction) -> Result<Self> {
-        let fields: HashMap<_, _> = interaction
-            .data
-            .components
-            .iter()
-            .flat_map(|row| row.components.iter())
-            .filter_map(|component| match component {
-                ActionRowComponent::InputText(input_text) => {
-                    Some((input_text.custom_id.as_str(), input_text.value.as_str()))
-                }
-                _ => None,
-            })
-            .collect();
-
-        let field = |key| {
-            fields
-                .get(key)
-                .with_context(|| format!("Missing field: {key:?}"))
-        };
+        for (id, value) in fields {
+            match id {
+                ID_ABOUT_ME => about_me = Some(value),
+                ID_POLYAMORY_EXPERIENCE => polyamory_experience = Some(value),
+                _ => warn!(id, "Unhandled field ID"),
+            }
+        }
 
         Ok(IntroFields {
-            about_me: field(ID_ABOUT_ME)?,
-            polyamory_experience: field(ID_POLYAMORY_EXPERIENCE)?,
+            about_me: about_me.with_context(|| format!("Missing field: {ID_ABOUT_ME}"))?,
+            polyamory_experience: polyamory_experience
+                .with_context(|| format!("Missing field: {ID_POLYAMORY_EXPERIENCE}"))?,
         })
     }
-}
 
-impl<'a> TryFrom<&'a Message> for IntroFields<'a> {
-    type Error = Error;
+    fn from_modal_submit_interaction(msi: &'a ModalSubmitInteraction) -> Result<Self> {
+        Self::from_fields(
+            msi.data
+                .components
+                .iter()
+                .flat_map(|row| row.components.iter())
+                .filter_map(|component| match component {
+                    ActionRowComponent::InputText(input_text) => {
+                        Some((input_text.custom_id.as_str(), input_text.value.as_str()))
+                    }
+                    _ => None,
+                }),
+        )
+    }
 
-    fn try_from(message: &'a Message) -> Result<Self> {
-        let embed = message.embeds.first().context("Message has no embeds")?;
-
-        let fields: HashMap<_, _> = embed
-            .fields
-            .iter()
-            .map(|field| (field.name.as_str(), field.value.as_str()))
-            .collect();
-
-        let field = |key| {
-            fields
-                .get(key)
-                .with_context(|| format!("Missing field: {key:?}"))
-        };
-
-        Ok(IntroFields {
-            about_me: field(LABEL_ABOUT_ME)?,
-            polyamory_experience: field(LABEL_POLYAMORY_EXPERIENCE)?,
-        })
+    fn from_message_embeds(message: &'a Message) -> Result<Self> {
+        Self::from_fields(
+            message
+                .embeds
+                .iter()
+                .flat_map(|embed| embed.fields.iter())
+                .map(|field| (field.name.as_str(), field.value.as_str())),
+        )
     }
 }
 
@@ -206,7 +196,7 @@ async fn submit_intro_quarantined(
         .member
         .clone()
         .context("Interaction has no member")?;
-    let intro_fields = IntroFields::try_from(interaction)?;
+    let intro_fields = IntroFields::from_modal_submit_interaction(interaction)?;
 
     unquarantine(ctx, quarantine_role_id, &mut member).await?;
     edit_or_send_intro_message(
@@ -236,7 +226,7 @@ async fn submit_intro_slash(
     let guild_id = interaction
         .guild_id
         .context("Interaction has no guild_id")?;
-    let intro_fields = IntroFields::try_from(interaction)?;
+    let intro_fields = IntroFields::from_modal_submit_interaction(interaction)?;
     let message = edit_or_send_intro_message(
         ctx,
         db,
@@ -410,7 +400,7 @@ pub async fn intro(ctx: CommandContext<'_>) -> Result<()> {
 
     let intro_fields = intro_message
         .as_ref()
-        .map(IntroFields::try_from)
+        .map(IntroFields::from_message_embeds)
         .transpose()
         .unwrap_or_else(|error| {
             warn!(?error, "Error getting intro fields");
