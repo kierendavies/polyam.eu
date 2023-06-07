@@ -46,6 +46,14 @@ const LABEL_INTRODUCE_YOURSELF: &str = "Introduce yourself";
 const LABEL_ABOUT_ME: &str = "About me";
 const LABEL_POLYAMORY_EXPERIENCE: &str = "Polyamory experience";
 
+fn label_to_id(label: &str) -> Option<&'static str> {
+    match label {
+        LABEL_ABOUT_ME => Some(ID_ABOUT_ME),
+        LABEL_POLYAMORY_EXPERIENCE => Some(ID_POLYAMORY_EXPERIENCE),
+        _ => None,
+    }
+}
+
 struct IntroFields<'a> {
     about_me: &'a str,
     polyamory_experience: &'a str,
@@ -92,7 +100,7 @@ impl<'a> IntroFields<'a> {
                 .embeds
                 .iter()
                 .flat_map(|embed| embed.fields.iter())
-                .map(|field| (field.name.as_str(), field.value.as_str())),
+                .filter_map(|field| label_to_id(&field.name).map(|id| (id, field.value.as_str()))),
         )
     }
 }
