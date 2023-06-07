@@ -1,5 +1,5 @@
-mod cache;
 mod messages;
+mod persist;
 
 use std::{collections::HashSet, future};
 
@@ -386,7 +386,7 @@ pub async fn modal_submit_interaction(
     required_permissions = "ADMINISTRATOR",
     slash_command
 )]
-pub async fn onboarding_sync_cache(ctx: CommandContext<'_>) -> Result<()> {
+pub async fn onboarding_sync_db(ctx: CommandContext<'_>) -> Result<()> {
     ctx.defer().await?;
 
     let bot_id = ctx.framework().bot_id;
@@ -413,28 +413,28 @@ pub async fn onboarding_sync_cache(ctx: CommandContext<'_>) -> Result<()> {
 
     let mut tx = ctx.data().db.begin().await?;
 
-    let cached_intros = cache::intro_message::get_all(&mut tx, guild_id).await?;
-    let cached_intro_message_ids: HashSet<_> = cached_intros
+    let persisted_intros = persist::intro_message::get_all(&mut tx, guild_id).await?;
+    let persisted_intro_message_ids: HashSet<_> = persisted_intros
         .iter()
         .map(|(_, _, message_id)| *message_id)
         .collect();
 
     for message in &found_intros {
-        if !cached_intro_message_ids.contains(&message.id) {
+        if !persisted_intro_message_ids.contains(&message.id) {
             let user_id = message
                 .mentions
                 .first()
                 .context("message has no mentions")?
                 .id;
-            cache::intro_message::set(&mut tx, guild_id, user_id, message.channel_id, message.id)
+            persist::intro_message::set(&mut tx, guild_id, user_id, message.channel_id, message.id)
                 .await?;
             n_added += 1;
         }
     }
 
-    for (user_id, _, message_id) in &cached_intros {
+    for (user_id, _, message_id) in &persisted_intros {
         if !found_intro_message_ids.contains(message_id) {
-            cache::intro_message::delete(&mut tx, guild_id, *user_id).await?;
+            persist::intro_message::delete(&mut tx, guild_id, *user_id).await?;
             n_deleted += 1;
         }
     }

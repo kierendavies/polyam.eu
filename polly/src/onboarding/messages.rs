@@ -9,7 +9,7 @@ use serenity::{
 use sqlx::PgPool;
 
 use super::{
-    cache,
+    persist,
     IntroFields,
     ID_INTRO_QUARANTINE,
     LABEL_ABOUT_ME,
@@ -81,7 +81,7 @@ pub(super) async fn send_welcome_message(
         })
         .await?;
 
-    cache::welcome_message::set(db, member.guild_id, member.user.id, channel_id, message.id)
+    persist::welcome_message::set(db, member.guild_id, member.user.id, channel_id, message.id)
         .await?;
 
     Ok(message)
@@ -97,10 +97,10 @@ pub(super) async fn delete_welcome_message(
     let mut tx = db.begin().await?;
 
     if let Some((channel_id, message_id)) =
-        cache::welcome_message::get(&mut tx, guild_id, user_id).await?
+        persist::welcome_message::get(&mut tx, guild_id, user_id).await?
     {
         channel_id.delete_message(ctx, message_id).await?;
-        cache::welcome_message::delete(&mut tx, guild_id, user_id).await?;
+        persist::welcome_message::delete(&mut tx, guild_id, user_id).await?;
     }
 
     tx.commit().await?;
@@ -157,7 +157,7 @@ pub(super) async fn edit_or_send_intro_message(
     let mut tx = db.begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
-        cache::intro_message::get(&mut tx, guild_id, user.id).await?
+        persist::intro_message::get(&mut tx, guild_id, user.id).await?
     {
         channel_id
             .edit_message(ctx, message_id, |message| {
@@ -170,7 +170,7 @@ pub(super) async fn edit_or_send_intro_message(
                 create_intro_message(user, intro_fields, message)
             })
             .await?;
-        cache::intro_message::set(db, guild_id, user.id, channel_id, message.id).await?;
+        persist::intro_message::set(db, guild_id, user.id, channel_id, message.id).await?;
         message
     };
 
@@ -188,12 +188,12 @@ pub(super) async fn get_intro_message(
     let mut tx = db.begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
-        cache::intro_message::get(&mut tx, guild_id, user_id).await?
+        persist::intro_message::get(&mut tx, guild_id, user_id).await?
     {
         match channel_id.message(ctx, message_id).await {
             Ok(message) => Some(message),
             Err(serenity::Error::Http(err)) if err.status_code() == Some(StatusCode::NOT_FOUND) => {
-                cache::intro_message::delete(&mut tx, guild_id, user_id).await?;
+                persist::intro_message::delete(&mut tx, guild_id, user_id).await?;
                 None
             }
             Err(err) => return Err(err.into()),

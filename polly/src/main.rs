@@ -93,7 +93,7 @@ pub async fn bot_framework(
             commands: vec![
                 bubblewrap(),
                 onboarding::intro(),
-                onboarding::onboarding_sync_cache(),
+                onboarding::onboarding_sync_db(),
             ],
             on_error: |error| {
                 Box::pin(async move {
