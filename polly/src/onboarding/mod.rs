@@ -1,6 +1,7 @@
 mod cache;
 mod messages;
 
+use std::{collections::HashSet, future};
 
 use anyhow::Context as _;
 use poise::{
@@ -21,6 +22,7 @@ use poise::{
     },
     ApplicationCommandOrAutocompleteInteraction,
 };
+use serenity::futures::TryStreamExt;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
@@ -366,6 +368,73 @@ pub async fn modal_submit_interaction(
         _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
     }
 
+    Ok(())
+}
+
+#[poise::command(
+    default_member_permissions = "ADMINISTRATOR",
+    guild_only,
+    owners_only,
+    required_permissions = "ADMINISTRATOR",
+    slash_command
+)]
+pub async fn onboarding_sync_cache(ctx: CommandContext<'_>) -> Result<()> {
+    ctx.defer().await?;
+
+    let bot_id = ctx.framework().bot_id;
+    let guild_id = ctx.guild_id().context("Context has no guild_id")?;
+    let config = guild_config(ctx.framework(), guild_id)?;
+
+    let found_intros: Vec<Message> = config
+        .intros_channel
+        .messages_iter(&ctx)
+        .try_filter(|message| {
+            future::ready(
+                message.author.id == bot_id
+                    && !message.embeds.is_empty()
+                    && !message.mentions.is_empty(),
+            )
+        })
+        .try_collect()
+        .await?;
+    let found_intro_message_ids: HashSet<_> =
+        found_intros.iter().map(|message| message.id).collect();
+
+    let mut n_added = 0;
+    let mut n_deleted = 0;
+
+    let mut tx = ctx.data().db.begin().await?;
+
+    let cached_intros = cache::intro_message::get_all(&mut tx, guild_id).await?;
+    let cached_intro_message_ids: HashSet<_> = cached_intros
+        .iter()
+        .map(|(_, _, message_id)| *message_id)
+        .collect();
+
+    for message in &found_intros {
+        if !cached_intro_message_ids.contains(&message.id) {
+            let user_id = message
+                .mentions
+                .first()
+                .context("message has no mentions")?
+                .id;
+            cache::intro_message::set(&mut tx, guild_id, user_id, message.channel_id, message.id)
+                .await?;
+            n_added += 1;
+        }
+    }
+
+    for (user_id, _, message_id) in &cached_intros {
+        if !found_intro_message_ids.contains(message_id) {
+            cache::intro_message::delete(&mut tx, guild_id, *user_id).await?;
+            n_deleted += 1;
+        }
+    }
+
+    tx.commit().await?;
+
+    ctx.say(format!("intros: added {n_added}, deleted {n_deleted}"))
+        .await?;
     Ok(())
 }
 

@@ -90,7 +90,11 @@ pub async fn bot_framework(
             })
         })
         .options(poise::FrameworkOptions {
-            commands: vec![bubblewrap(), onboarding::intro()],
+            commands: vec![
+                bubblewrap(),
+                onboarding::intro(),
+                onboarding::onboarding_sync_cache(),
+            ],
             on_error: |error| {
                 Box::pin(async move {
                     let handled = match error {
