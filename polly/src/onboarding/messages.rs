@@ -1,12 +1,10 @@
 use anyhow::Context as _;
 use http::StatusCode;
-use poise::serenity_prelude::{ChannelId, GuildId, Message, User, UserId};
+use poise::serenity_prelude::{GuildId, Message, User, UserId};
 use serenity::{
     builder::{CreateEmbed, CreateMessage, EditMessage},
     model::{guild::Member, Permissions},
-    prelude::Context,
 };
-use sqlx::PgPool;
 
 use super::{
     persist,
@@ -16,7 +14,10 @@ use super::{
     LABEL_INTRODUCE_YOURSELF,
     LABEL_POLYAMORY_EXPERIENCE,
 };
-use crate::error::{bail, Result};
+use crate::{
+    context::Context,
+    error::{bail, Result},
+};
 
 fn create_welcome_message<'a, 'b>(
     guild_name: &str,
@@ -46,21 +47,19 @@ fn create_welcome_message<'a, 'b>(
 }
 
 #[tracing::instrument(skip_all)]
-pub(super) async fn send_welcome_message(
-    ctx: &Context,
-    db: &PgPool,
-    channel_id: ChannelId,
-    member: &Member,
-) -> Result<Message> {
-    let channel = channel_id
-        .to_channel(ctx)
+pub(super) async fn send_welcome_message(ctx: &impl Context, member: &Member) -> Result<Message> {
+    let config = ctx.config().guild(member.guild_id)?;
+
+    let channel = config
+        .quarantine_channel
+        .to_channel(ctx.serenity())
         .await?
         .guild()
         .context("Not a guild channel")?;
 
     assert!(channel.guild_id == member.guild_id);
 
-    let guild = member.guild_id.to_partial_guild(ctx).await?;
+    let guild = member.guild_id.to_partial_guild(ctx.serenity()).await?;
 
     let perms = guild.user_permissions_in(&channel, member)?;
     if !perms.contains(Permissions::VIEW_CHANNEL) {
@@ -75,31 +74,38 @@ pub(super) async fn send_welcome_message(
         );
     }
 
-    let message = channel_id
-        .send_message(ctx, |message| {
+    let message = channel
+        .send_message(ctx.serenity(), |message| {
             create_welcome_message(&guild.name, member, message)
         })
         .await?;
 
-    persist::welcome_message::set(db, member.guild_id, member.user.id, channel_id, message.id)
-        .await?;
+    persist::welcome_message::set(
+        ctx.db(),
+        member.guild_id,
+        member.user.id,
+        channel.id,
+        message.id,
+    )
+    .await?;
 
     Ok(message)
 }
 
 #[tracing::instrument(skip_all)]
 pub(super) async fn delete_welcome_message(
-    ctx: &Context,
-    db: &PgPool,
+    ctx: &impl Context,
     guild_id: GuildId,
     user_id: UserId,
 ) -> Result<()> {
-    let mut tx = db.begin().await?;
+    let mut tx = ctx.db().begin().await?;
 
     if let Some((channel_id, message_id)) =
         persist::welcome_message::get(&mut tx, guild_id, user_id).await?
     {
-        channel_id.delete_message(ctx, message_id).await?;
+        channel_id
+            .delete_message(ctx.serenity(), message_id)
+            .await?;
         persist::welcome_message::delete(&mut tx, guild_id, user_id).await?;
     }
 
@@ -147,30 +153,38 @@ fn edit_intro_message<'a, 'b>(
 
 #[tracing::instrument(skip_all)]
 pub(super) async fn edit_or_send_intro_message(
-    ctx: &Context,
-    db: &PgPool,
+    ctx: &impl Context,
     guild_id: GuildId,
-    channel_id: ChannelId,
     user: &User,
     intro_fields: &IntroFields<'_>,
 ) -> Result<Message> {
-    let mut tx = db.begin().await?;
+    let config = ctx.config().guild(guild_id)?;
+
+    let mut tx = ctx.db().begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
         persist::intro_message::get(&mut tx, guild_id, user.id).await?
     {
         channel_id
-            .edit_message(ctx, message_id, |message| {
+            .edit_message(ctx.serenity(), message_id, |message| {
                 edit_intro_message(user, intro_fields, message)
             })
             .await?
     } else {
-        let message = channel_id
-            .send_message(ctx, |message| {
+        let message = config
+            .intros_channel
+            .send_message(ctx.serenity(), |message| {
                 create_intro_message(user, intro_fields, message)
             })
             .await?;
-        persist::intro_message::set(db, guild_id, user.id, channel_id, message.id).await?;
+        persist::intro_message::set(
+            &mut tx,
+            guild_id,
+            user.id,
+            config.intros_channel,
+            message.id,
+        )
+        .await?;
         message
     };
 
@@ -180,17 +194,16 @@ pub(super) async fn edit_or_send_intro_message(
 }
 
 pub(super) async fn get_intro_message(
-    ctx: &Context,
-    db: &PgPool,
+    ctx: &impl Context,
     guild_id: GuildId,
     user_id: UserId,
 ) -> Result<Option<Message>> {
-    let mut tx = db.begin().await?;
+    let mut tx = ctx.db().begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
         persist::intro_message::get(&mut tx, guild_id, user_id).await?
     {
-        match channel_id.message(ctx, message_id).await {
+        match channel_id.message(ctx.serenity(), message_id).await {
             Ok(message) => Some(message),
             Err(serenity::Error::Http(err)) if err.status_code() == Some(StatusCode::NOT_FOUND) => {
                 persist::intro_message::delete(&mut tx, guild_id, user_id).await?;

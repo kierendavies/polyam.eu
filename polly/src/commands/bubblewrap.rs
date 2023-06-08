@@ -1,7 +1,10 @@
 use once_cell::sync::Lazy;
 use rand::{distributions::WeightedIndex, prelude::Distribution};
 
-use crate::{commands::CommandContext, error::Result};
+use crate::{
+    error::{Error, Result},
+    UserData,
+};
 
 const BUBBLES: [(&str, u32); 3] = [("🔵", 240), ("💥", 10), ("🐱", 1)];
 
@@ -13,7 +16,7 @@ const SIZE: u32 = 5;
 /// Get some bubble wrap to pop
 #[poise::command(slash_command)]
 #[tracing::instrument(skip(ctx))]
-pub async fn bubblewrap(ctx: CommandContext<'_>) -> Result<()> {
+pub async fn bubblewrap(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
     let mut text = String::new();
     {
         let mut rng = rand::thread_rng();

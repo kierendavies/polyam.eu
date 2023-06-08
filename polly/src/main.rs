@@ -3,13 +3,15 @@
 
 mod commands;
 pub mod config;
+mod context;
 mod error;
 mod onboarding;
 
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::Context as _;
-use poise::serenity_prelude::{Context, GatewayIntents, Interaction};
+use context::EventContext;
+use poise::serenity_prelude::{GatewayIntents, Interaction};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use sqlx::PgPool;
@@ -26,13 +28,18 @@ type Framework = poise::Framework<UserData, crate::error::Error>;
 type FrameworkContext<'a> = poise::FrameworkContext<'a, UserData, crate::error::Error>;
 
 async fn handle_event(
-    ctx: &Context,
+    serenity: &serenity::client::Context,
     framework: FrameworkContext<'_>,
     event: &poise::Event<'_>,
 ) -> crate::error::Result<()> {
+    let ctx = EventContext {
+        serenity,
+        framework: &framework,
+    };
+
     match event {
         poise::Event::GuildMemberAddition { new_member } => {
-            onboarding::guild_member_addition(ctx, framework, new_member).await?;
+            onboarding::guild_member_addition(&ctx, new_member).await?;
         }
 
         poise::Event::GuildMemberRemoval {
@@ -40,7 +47,7 @@ async fn handle_event(
             user,
             member_data_if_available: _,
         } => {
-            onboarding::guild_member_removal(ctx, framework, guild_id, user).await?;
+            onboarding::guild_member_removal(&ctx, guild_id, user).await?;
         }
 
         poise::Event::InteractionCreate {
@@ -50,7 +57,7 @@ async fn handle_event(
             .custom_id
             .starts_with(onboarding::ID_PREFIX) =>
         {
-            onboarding::message_component_interaction(ctx, framework, interaction).await?;
+            onboarding::message_component_interaction(&ctx, interaction).await?;
         }
         poise::Event::InteractionCreate {
             interaction: Interaction::ModalSubmit(interaction),
@@ -59,7 +66,7 @@ async fn handle_event(
             .custom_id
             .starts_with(onboarding::ID_PREFIX) =>
         {
-            onboarding::modal_submit_interaction(ctx, framework, interaction).await?;
+            onboarding::modal_submit_interaction(&ctx, interaction).await?;
         }
 
         _ => {}

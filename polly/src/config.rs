@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use anyhow::anyhow;
 use poise::serenity_prelude::{ChannelId, GuildId, RoleId};
 use serde::{de, Deserialize as _};
 use serde_derive::Deserialize;
@@ -8,6 +9,14 @@ use serde_derive::Deserialize;
 pub struct Config {
     #[serde(deserialize_with = "deserialize_snowflake_map", flatten)]
     pub guilds: BTreeMap<GuildId, GuildConfig>,
+}
+
+impl Config {
+    pub fn guild(&self, id: GuildId) -> crate::error::Result<&GuildConfig> {
+        self.guilds
+            .get(&id)
+            .ok_or(anyhow!("No config for guild").into())
+    }
 }
 
 #[allow(clippy::module_name_repetitions)]

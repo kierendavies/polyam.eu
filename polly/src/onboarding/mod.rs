@@ -7,8 +7,6 @@ use anyhow::Context as _;
 use poise::{
     serenity_prelude::{
         ActionRowComponent,
-        ChannelId,
-        Context,
         CreateInteractionResponse,
         GuildId,
         InputTextStyle,
@@ -17,22 +15,19 @@ use poise::{
         Message,
         MessageComponentInteraction,
         ModalSubmitInteraction,
-        RoleId,
         User,
     },
     ApplicationCommandOrAutocompleteInteraction,
 };
 use serenity::futures::TryStreamExt;
-use sqlx::PgPool;
 use tracing::{info, warn};
 
 use self::messages::{delete_welcome_message, edit_or_send_intro_message, send_welcome_message};
 use crate::{
-    commands::CommandContext,
-    config::GuildConfig,
-    error::{bail, Result},
+    context::Context,
+    error::{bail, Error, Result},
     onboarding::messages::get_intro_message,
-    FrameworkContext,
+    UserData,
 };
 
 pub const ID_PREFIX: &str = "onboarding_";
@@ -105,37 +100,37 @@ impl<'a> IntroFields<'a> {
     }
 }
 
-#[tracing::instrument(skip(framework))]
-fn guild_config(framework: FrameworkContext<'_>, guild_id: GuildId) -> Result<&GuildConfig> {
-    Ok(framework
-        .user_data
-        .config
-        .guilds
-        .get(&guild_id)
-        .context("No config for guild")?)
-}
-
 #[tracing::instrument(skip_all)]
-async fn quarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Result<()> {
-    member.add_role(ctx, role_id).await?;
+async fn quarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
+    let config = ctx.config().guild(member.guild_id)?;
+
+    member
+        .add_role(ctx.serenity(), config.quarantine_role)
+        .await?;
     info!(
         %member.guild_id,
         %member.user.id,
         member.user.tag = member.user.tag(),
         "Quarantined member"
     );
+
     Ok(())
 }
 
 #[tracing::instrument(skip_all)]
-async fn unquarantine(ctx: &Context, role_id: RoleId, member: &mut Member) -> Result<()> {
-    member.remove_role(ctx, role_id).await?;
+async fn unquarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
+    let config = ctx.config().guild(member.guild_id)?;
+
+    member
+        .remove_role(ctx.serenity(), config.quarantine_role)
+        .await?;
     info!(
         %member.guild_id,
         %member.user.id,
         member.user.tag = member.user.tag(),
         "Unquarantined member"
     );
+
     Ok(())
 }
 
@@ -184,15 +179,12 @@ fn create_intro_modal<'a, 'b>(
 
 #[tracing::instrument(skip_all)]
 async fn submit_intro_quarantined(
-    ctx: &Context,
-    db: &PgPool,
-    quarantine_role_id: RoleId,
-    intros_channel_id: ChannelId,
+    ctx: &impl Context,
     interaction: &ModalSubmitInteraction,
 ) -> Result<()> {
     let ack_content = "Thanks for submitting your introduction. In the next few seconds, you'll get access to the rest of the server.";
     interaction
-        .create_interaction_response(ctx, |response| {
+        .create_interaction_response(ctx.serenity(), |response| {
             response
                 .kind(InteractionResponseType::ChannelMessageWithSource)
                 .interaction_response_data(|data| data.content(ack_content).ephemeral(true))
@@ -208,48 +200,31 @@ async fn submit_intro_quarantined(
         .context("Interaction has no member")?;
     let intro_fields = IntroFields::from_modal_submit_interaction(interaction)?;
 
-    unquarantine(ctx, quarantine_role_id, &mut member).await?;
-    edit_or_send_intro_message(
-        ctx,
-        db,
-        guild_id,
-        intros_channel_id,
-        &interaction.user,
-        &intro_fields,
-    )
-    .await?;
+    unquarantine(ctx, &mut member).await?;
+    edit_or_send_intro_message(ctx, guild_id, &interaction.user, &intro_fields).await?;
     interaction
-        .delete_original_interaction_response(ctx)
+        .delete_original_interaction_response(ctx.serenity())
         .await?;
-    delete_welcome_message(ctx, db, guild_id, interaction.user.id).await?;
+    delete_welcome_message(ctx, guild_id, interaction.user.id).await?;
 
     Ok(())
 }
 
 #[tracing::instrument(skip_all)]
 async fn submit_intro_slash(
-    ctx: &Context,
-    db: &PgPool,
-    intros_channel_id: ChannelId,
+    ctx: &impl Context,
     interaction: &ModalSubmitInteraction,
 ) -> Result<()> {
     let guild_id = interaction
         .guild_id
         .context("Interaction has no guild_id")?;
     let intro_fields = IntroFields::from_modal_submit_interaction(interaction)?;
-    let message = edit_or_send_intro_message(
-        ctx,
-        db,
-        guild_id,
-        intros_channel_id,
-        &interaction.user,
-        &intro_fields,
-    )
-    .await?;
-    let message_url = message.link_ensured(ctx).await;
+    let message =
+        edit_or_send_intro_message(ctx, guild_id, &interaction.user, &intro_fields).await?;
+    let message_url = message.link_ensured(ctx.serenity()).await;
 
     interaction
-        .create_interaction_response(ctx, |response| {
+        .create_interaction_response(ctx.serenity(), |response| {
             response
                 .kind(InteractionResponseType::ChannelMessageWithSource)
                 .interaction_response_data(|data| {
@@ -278,30 +253,20 @@ async fn submit_intro_slash(
     ),
     skip_all,
 )]
-pub async fn guild_member_addition(
-    ctx: &Context,
-    framework: FrameworkContext<'_>,
-    member: &Member,
-) -> Result<()> {
-    let config = guild_config(framework, member.guild_id)?;
-    let db = &framework.user_data.db;
-
+pub async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()> {
     let mut member = member.clone();
-    quarantine(ctx, config.quarantine_role, &mut member).await?;
-    send_welcome_message(ctx, db, config.quarantine_channel, &member).await?;
+    quarantine(ctx, &mut member).await?;
+    send_welcome_message(ctx, &member).await?;
 
     Ok(())
 }
 
 pub async fn guild_member_removal(
-    ctx: &Context,
-    framework: FrameworkContext<'_>,
+    ctx: &impl Context,
     guild_id: &GuildId,
     user: &User,
 ) -> Result<()> {
-    let db = &framework.user_data.db;
-
-    delete_welcome_message(ctx, db, *guild_id, user.id).await?;
+    delete_welcome_message(ctx, *guild_id, user.id).await?;
 
     Ok(())
 }
@@ -317,14 +282,13 @@ pub async fn guild_member_removal(
     skip_all,
 )]
 pub async fn message_component_interaction(
-    ctx: &Context,
-    _framework: FrameworkContext<'_>,
+    ctx: &impl Context,
     interaction: &MessageComponentInteraction,
 ) -> Result<()> {
     match interaction.data.custom_id.as_str() {
         ID_INTRO_QUARANTINE => {
             interaction
-                .create_interaction_response(ctx, |response| {
+                .create_interaction_response(ctx.serenity(), |response| {
                     create_intro_modal(ID_INTRO_QUARANTINE, None, response)
                 })
                 .await?;
@@ -347,30 +311,16 @@ pub async fn message_component_interaction(
     skip_all,
 )]
 pub async fn modal_submit_interaction(
-    ctx: &Context,
-    framework: FrameworkContext<'_>,
+    ctx: &impl Context,
     interaction: &ModalSubmitInteraction,
 ) -> Result<()> {
-    let guild_id = interaction
-        .guild_id
-        .context("Interaction has no guild_id")?;
-    let config = guild_config(framework, guild_id)?;
-    let db = &framework.user_data.db;
-
     match interaction.data.custom_id.as_str() {
         ID_INTRO_QUARANTINE => {
-            submit_intro_quarantined(
-                ctx,
-                db,
-                config.quarantine_role,
-                config.intros_channel,
-                interaction,
-            )
-            .await?;
+            submit_intro_quarantined(ctx, interaction).await?;
         }
 
         ID_INTRO_SLASH => {
-            submit_intro_slash(ctx, db, config.intros_channel, interaction).await?;
+            submit_intro_slash(ctx, interaction).await?;
         }
 
         _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
@@ -386,16 +336,16 @@ pub async fn modal_submit_interaction(
     required_permissions = "ADMINISTRATOR",
     slash_command
 )]
-pub async fn onboarding_sync_db(ctx: CommandContext<'_>) -> Result<()> {
+pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
     ctx.defer().await?;
 
     let bot_id = ctx.framework().bot_id;
     let guild_id = ctx.guild_id().context("Context has no guild_id")?;
-    let config = guild_config(ctx.framework(), guild_id)?;
+    let config = ctx.config().guild(guild_id)?;
 
     let found_intros: Vec<Message> = config
         .intros_channel
-        .messages_iter(&ctx)
+        .messages_iter(ctx.serenity_context())
         .try_filter(|message| {
             future::ready(
                 message.author.id == bot_id
@@ -424,7 +374,7 @@ pub async fn onboarding_sync_db(ctx: CommandContext<'_>) -> Result<()> {
             let user_id = message
                 .mentions
                 .first()
-                .context("message has no mentions")?
+                .context("Message has no mentions")?
                 .id;
             persist::intro_message::set(&mut tx, guild_id, user_id, message.channel_id, message.id)
                 .await?;
@@ -441,7 +391,7 @@ pub async fn onboarding_sync_db(ctx: CommandContext<'_>) -> Result<()> {
 
     tx.commit().await?;
 
-    ctx.say(format!("intros: added {n_added}, deleted {n_deleted}"))
+    ctx.say(format!("Intros: added {n_added}, deleted {n_deleted}"))
         .await?;
     Ok(())
 }
@@ -457,23 +407,14 @@ pub async fn onboarding_sync_db(ctx: CommandContext<'_>) -> Result<()> {
     ),
     skip(ctx),
 )]
-pub async fn intro(ctx: CommandContext<'_>) -> Result<()> {
-    let poise::Context::Application(app_ctx) = ctx else {
-        bail!("Expected ApplicationContext");
-    };
-    let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) = app_ctx.interaction else {
+pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
+    let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) = ctx.interaction else {
         bail!("Expected ApplicationCommandInteraction");
     };
 
     let guild_id = ctx.guild_id().context("Context has no guild_id")?;
 
-    let intro_message = get_intro_message(
-        ctx.serenity_context(),
-        &ctx.data().db,
-        guild_id,
-        ctx.author().id,
-    )
-    .await?;
+    let intro_message = get_intro_message(&ctx, guild_id, ctx.author().id).await?;
 
     let intro_fields = intro_message
         .as_ref()
@@ -485,7 +426,7 @@ pub async fn intro(ctx: CommandContext<'_>) -> Result<()> {
         });
 
     interaction
-        .create_interaction_response(ctx, |response| {
+        .create_interaction_response(ctx.serenity_context, |response| {
             create_intro_modal(ID_INTRO_SLASH, intro_fields.as_ref(), response)
         })
         .await?;
