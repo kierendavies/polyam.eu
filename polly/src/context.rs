@@ -1,6 +1,11 @@
 use sqlx::PgPool;
 
-use crate::{config::Config, error::Error, UserData};
+use crate::{config::Config, error::Error};
+
+pub struct UserData {
+    pub config: Config,
+    pub db: PgPool,
+}
 
 pub trait Context {
     fn serenity(&self) -> &serenity::client::Context;
@@ -29,7 +34,7 @@ impl<E> Context for poise::ApplicationContext<'_, UserData, E> {
 #[derive(Clone, Copy)]
 pub struct EventContext<'a> {
     pub serenity: &'a serenity::client::Context,
-    pub framework: &'a poise::FrameworkContext<'a, UserData, Error>,
+    pub framework: poise::FrameworkContext<'a, UserData, Error>,
 }
 
 impl Context for EventContext<'_> {

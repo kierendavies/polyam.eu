@@ -10,6 +10,7 @@ use poise::{
         CreateInteractionResponse,
         GuildId,
         InputTextStyle,
+        Interaction,
         InteractionResponseType,
         Member,
         Message,
@@ -324,6 +325,37 @@ pub async fn modal_submit_interaction(
         }
 
         _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
+    }
+
+    Ok(())
+}
+
+pub async fn handle_event(ctx: impl Context, event: &poise::Event<'_>) -> crate::error::Result<()> {
+    match event {
+        poise::Event::GuildMemberAddition { new_member } => {
+            guild_member_addition(&ctx, new_member).await?;
+        }
+
+        poise::Event::GuildMemberRemoval {
+            guild_id,
+            user,
+            member_data_if_available: _,
+        } => {
+            guild_member_removal(&ctx, guild_id, user).await?;
+        }
+
+        poise::Event::InteractionCreate {
+            interaction: Interaction::MessageComponent(interaction),
+        } if interaction.data.custom_id.starts_with(ID_PREFIX) => {
+            message_component_interaction(&ctx, interaction).await?;
+        }
+        poise::Event::InteractionCreate {
+            interaction: Interaction::ModalSubmit(interaction),
+        } if interaction.data.custom_id.starts_with(ID_PREFIX) => {
+            modal_submit_interaction(&ctx, interaction).await?;
+        }
+
+        _ => {}
     }
 
     Ok(())
