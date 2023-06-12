@@ -271,10 +271,11 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
     let config = ctx.config().guild(member.guild_id)?;
     let intro = Intro::from_modal_submit_interaction(interaction)?;
 
-    let is_from_quarantine = interaction
-        .message
-        .as_ref()
-        .is_some_and(|message| message.channel_id == config.quarantine_channel);
+    // TODO: When Shuttle has updated to Rust 1.70, switch this to is_some_and
+    let is_from_quarantine = match &interaction.message {
+        Some(message) => message.channel_id == config.quarantine_channel,
+        None => false,
+    };
 
     if is_from_quarantine {
         let ack_content = "Thanks for submitting your introduction. In the next few seconds, you'll get access to the rest of the server.";
