@@ -33,20 +33,20 @@ const LABEL_INTRODUCE_YOURSELF: &str = "Introduce yourself";
 const LABEL_ABOUT_ME: &str = "About me";
 const LABEL_POLYAMORY_EXPERIENCE: &str = "Polyamory experience";
 
-pub struct Intro<'a> {
-    pub about_me: &'a str,
-    pub polyamory_experience: &'a str,
+pub struct Intro {
+    pub about_me: String,
+    pub polyamory_experience: String,
 }
 
-impl<'a> Intro<'a> {
-    fn from_fields(fields: impl Iterator<Item = (&'a str, &'a str)>) -> Result<Self> {
-        let mut about_me: Option<&str> = None;
-        let mut polyamory_experience: Option<&str> = None;
+impl Intro {
+    fn from_fields<'a>(fields: impl Iterator<Item = (&'a str, impl Into<String>)>) -> Result<Self> {
+        let mut about_me: Option<String> = None;
+        let mut polyamory_experience: Option<String> = None;
 
         for (id, value) in fields {
             match id {
-                ID_ABOUT_ME => about_me = Some(value),
-                ID_POLYAMORY_EXPERIENCE => polyamory_experience = Some(value),
+                ID_ABOUT_ME => about_me = Some(value.into()),
+                ID_POLYAMORY_EXPERIENCE => polyamory_experience = Some(value.into()),
                 _ => warn!(id, "Unhandled field ID"),
             }
         }
@@ -58,7 +58,7 @@ impl<'a> Intro<'a> {
         })
     }
 
-    pub fn from_modal_submit_interaction(msi: &'a ModalSubmitInteraction) -> Result<Self> {
+    fn from_modal_submit_interaction(msi: &ModalSubmitInteraction) -> Result<Self> {
         Self::from_fields(
             msi.data
                 .components
@@ -73,7 +73,7 @@ impl<'a> Intro<'a> {
         )
     }
 
-    pub fn from_message_embeds(message: &'a Message) -> Result<Self> {
+    fn from_message_embeds(message: Message) -> Result<Self> {
         fn label_to_id(label: &str) -> Option<&'static str> {
             match label {
                 LABEL_ABOUT_ME => Some(ID_ABOUT_ME),
@@ -85,9 +85,9 @@ impl<'a> Intro<'a> {
         Self::from_fields(
             message
                 .embeds
-                .iter()
-                .flat_map(|embed| embed.fields.iter())
-                .filter_map(|field| label_to_id(&field.name).map(|id| (id, field.value.as_str()))),
+                .into_iter()
+                .flat_map(|embed| embed.fields.into_iter())
+                .filter_map(|field| label_to_id(&field.name).map(|id| (id, field.value))),
         )
     }
 }
@@ -123,7 +123,7 @@ pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a
                                     .min_length(50)
                                     .max_length(1000);
                                 if let Some(intro) = prefill {
-                                    text.value(intro.about_me);
+                                    text.value(&intro.about_me);
                                 }
                                 text
                             })
@@ -137,7 +137,7 @@ pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a
                                     .required(true)
                                     .max_length(1000);
                                 if let Some(intro) = prefill {
-                                    text.value(intro.polyamory_experience);
+                                    text.value(&intro.polyamory_experience);
                                 }
                                 text
                             })
@@ -153,10 +153,10 @@ fn create_embed(user: &User, intro: &Intro) -> CreateEmbed {
 
     embed
         .description(format!("{user}"))
-        .field(LABEL_ABOUT_ME, intro.about_me, false)
+        .field(LABEL_ABOUT_ME, &intro.about_me, false)
         .field(
             LABEL_POLYAMORY_EXPERIENCE,
-            intro.polyamory_experience,
+            &intro.polyamory_experience,
             false,
         );
 
@@ -192,7 +192,7 @@ fn edit_message<'a>(user: &User, intro: &Intro) -> EditMessage<'a> {
 }
 
 #[tracing::instrument(skip_all)]
-async fn publish(ctx: &impl Context, member: &Member, intro: &Intro<'_>) -> Result<Message> {
+async fn publish(ctx: &impl Context, member: &Member, intro: &Intro) -> Result<Message> {
     let config = ctx.config().guild(member.guild_id)?;
 
     let mut tx = ctx.db().begin().await?;
@@ -225,36 +225,6 @@ async fn publish(ctx: &impl Context, member: &Member, intro: &Intro<'_>) -> Resu
         .await?;
 
         message
-    };
-
-    tx.commit().await?;
-
-    Ok(message)
-}
-
-pub async fn get_intro_message(
-    ctx: &impl Context,
-    guild_id: GuildId,
-    user_id: UserId,
-) -> Result<Option<Message>> {
-    let mut tx = ctx.db().begin().await?;
-
-    let message = if let Some((channel_id, message_id)) =
-        persist::intro_message::get(&mut tx, guild_id, user_id).await?
-    {
-        channel_id
-            .message(ctx.serenity(), message_id)
-            .await
-            .map(Some)
-            .or_else(|err| {
-                if is_http_not_found(&err) {
-                    Ok(None)
-                } else {
-                    Err(err)
-                }
-            })?
-    } else {
-        None
     };
 
     tx.commit().await?;
@@ -309,4 +279,32 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
     }
 
     Ok(())
+}
+
+pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Result<Option<Intro>> {
+    let mut tx = ctx.db().begin().await?;
+
+    let message = if let Some((channel_id, message_id)) =
+        persist::intro_message::get(&mut tx, guild_id, user_id).await?
+    {
+        channel_id
+            .message(ctx.serenity(), message_id)
+            .await
+            .map(Some)
+            .or_else(|err| {
+                if is_http_not_found(&err) {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            })?
+    } else {
+        None
+    };
+
+    tx.commit().await?;
+
+    let intro = message.map(Intro::from_message_embeds).transpose()?;
+
+    Ok(intro)
 }

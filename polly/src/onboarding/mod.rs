@@ -18,12 +18,8 @@ use poise::{
     ApplicationCommandOrAutocompleteInteraction,
 };
 use serenity::futures::TryStreamExt;
-use tracing::warn;
 
-use self::{
-    intro::{get_intro_message, Intro},
-    quarantine::{delete_welcome_message, quarantine},
-};
+use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
     context::{Context, UserData},
     error::{bail, Error, Result},
@@ -39,7 +35,13 @@ use crate::{
 )]
 async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()> {
     let mut member = member.clone();
-    quarantine(ctx, &mut member).await?;
+
+    if intro::get(ctx, member.guild_id, member.user.id)
+        .await?
+        .is_none()
+    {
+        quarantine(ctx, &mut member).await?;
+    }
 
     Ok(())
 }
@@ -223,16 +225,7 @@ pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Resul
 
     let guild_id = ctx.guild_id().context("Context has no guild_id")?;
 
-    let intro_message = get_intro_message(&ctx, guild_id, ctx.author().id).await?;
-
-    let intro = intro_message
-        .as_ref()
-        .map(Intro::from_message_embeds)
-        .transpose()
-        .unwrap_or_else(|error| {
-            warn!(?error, "Error getting intro fields");
-            None
-        });
+    let intro = intro::get(&ctx, guild_id, ctx.author().id).await?;
 
     interaction
         .create_interaction_response(ctx.serenity_context, |response| {
