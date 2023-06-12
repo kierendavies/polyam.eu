@@ -4,53 +4,13 @@ use poise::serenity_prelude::{GuildId, Member, Message, UserId};
 use serenity::{builder::CreateMessage, model::Permissions};
 use tracing::info;
 
-use super::{persist, ID_INTRO_QUARANTINE, LABEL_INTRODUCE_YOURSELF};
+use super::{intro, persist};
 use crate::{
     context::Context,
     error::{bail, Result},
 };
 
-#[tracing::instrument(skip_all)]
-pub async fn quarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
-    let config = ctx.config().guild(member.guild_id)?;
-
-    member
-        .add_role(ctx.serenity(), config.quarantine_role)
-        .await?;
-
-    info!(
-        %member.guild_id,
-        %member.user.id,
-        member.user.tag = member.user.tag(),
-        "Quarantined member"
-    );
-
-    Ok(())
-}
-
-#[tracing::instrument(skip_all)]
-pub async fn unquarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
-    let config = ctx.config().guild(member.guild_id)?;
-
-    member
-        .remove_role(ctx.serenity(), config.quarantine_role)
-        .await?;
-
-    info!(
-        %member.guild_id,
-        %member.user.id,
-        member.user.tag = member.user.tag(),
-        "Unquarantined member"
-    );
-
-    Ok(())
-}
-
-fn create_welcome_message<'a, 'b>(
-    guild_name: &str,
-    member: &Member,
-    message: &'b mut CreateMessage<'a>,
-) -> &'b mut CreateMessage<'a> {
+fn create_welcome_message<'a>(guild_name: &str, member: &Member) -> CreateMessage<'a> {
     let content = format!(
         "Welcome to {guild_name}, {member}! Please introduce yourself before you can start chatting.\n\
         \n\
@@ -61,16 +21,18 @@ fn create_welcome_message<'a, 'b>(
         4. Speak English in the common channels."
     );
 
+    let mut message = CreateMessage::default();
+
     message.content(content).components(|components| {
         components.create_action_row(|row| {
             row.create_button(|button| {
+                *button = intro::create_button();
                 button
-                    .custom_id(ID_INTRO_QUARANTINE)
-                    .label(LABEL_INTRODUCE_YOURSELF)
-                    .emoji('👋')
             })
         })
-    })
+    });
+
+    message
 }
 
 #[tracing::instrument(skip_all)]
@@ -103,7 +65,8 @@ pub async fn send_welcome_message(ctx: &impl Context, member: &Member) -> Result
 
     let message = channel
         .send_message(ctx.serenity(), |message| {
-            create_welcome_message(&guild.name, member, message)
+            *message = create_welcome_message(&guild.name, member);
+            message
         })
         .await?;
 
@@ -146,6 +109,46 @@ pub async fn delete_welcome_message(
     }
 
     tx.commit().await?;
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn quarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
+    let config = ctx.config().guild(member.guild_id)?;
+
+    member
+        .add_role(ctx.serenity(), config.quarantine_role)
+        .await?;
+
+    send_welcome_message(ctx, member).await?;
+
+    info!(
+        %member.guild_id,
+        %member.user.id,
+        member.user.tag = member.user.tag(),
+        "Quarantined member"
+    );
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn unquarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
+    let config = ctx.config().guild(member.guild_id)?;
+
+    member
+        .remove_role(ctx.serenity(), config.quarantine_role)
+        .await?;
+
+    delete_welcome_message(ctx, member.guild_id, member.user.id).await?;
+
+    info!(
+        %member.guild_id,
+        %member.user.id,
+        member.user.tag = member.user.tag(),
+        "Unquarantined member"
+    );
 
     Ok(())
 }

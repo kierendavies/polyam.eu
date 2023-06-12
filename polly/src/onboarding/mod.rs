@@ -21,30 +21,13 @@ use serenity::futures::TryStreamExt;
 use tracing::warn;
 
 use self::{
-    intro::{
-        create_intro_modal,
-        get_intro_message,
-        submit_intro_quarantined,
-        submit_intro_slash,
-        Intro,
-    },
-    quarantine::{delete_welcome_message, send_welcome_message, unquarantine},
+    intro::{get_intro_message, Intro},
+    quarantine::{delete_welcome_message, quarantine},
 };
 use crate::{
     context::{Context, UserData},
     error::{bail, Error, Result},
 };
-
-const ID_PREFIX: &str = "onboarding_";
-
-const ID_INTRO_QUARANTINE: &str = "onboarding_intro_quarantine";
-const ID_INTRO_SLASH: &str = "onboarding_intro_slash";
-const ID_ABOUT_ME: &str = "about_me";
-const ID_POLYAMORY_EXPERIENCE: &str = "polyamory_experience";
-
-const LABEL_INTRODUCE_YOURSELF: &str = "Introduce yourself";
-const LABEL_ABOUT_ME: &str = "About me";
-const LABEL_POLYAMORY_EXPERIENCE: &str = "Polyamory experience";
 
 #[tracing::instrument(
     fields(
@@ -56,8 +39,7 @@ const LABEL_POLYAMORY_EXPERIENCE: &str = "Polyamory experience";
 )]
 async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()> {
     let mut member = member.clone();
-    unquarantine(ctx, &mut member).await?;
-    send_welcome_message(ctx, &member).await?;
+    quarantine(ctx, &mut member).await?;
 
     Ok(())
 }
@@ -91,18 +73,16 @@ pub async fn message_component_interaction(
     interaction: &MessageComponentInteraction,
 ) -> Result<()> {
     match interaction.data.custom_id.as_str() {
-        ID_INTRO_QUARANTINE => {
-            interaction
-                .create_interaction_response(ctx.serenity(), |response| {
-                    create_intro_modal(ID_INTRO_QUARANTINE, None, response)
-                })
-                .await?;
-        }
+        intro::MODAL_ID => interaction
+            .create_interaction_response(ctx.serenity(), |response| {
+                *response = intro::create_modal(None);
+                response
+            })
+            .await
+            .map_err(Into::into),
 
-        _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
+        _ => Ok(()),
     }
-
-    Ok(())
 }
 
 #[tracing::instrument(
@@ -120,50 +100,35 @@ pub async fn modal_submit_interaction(
     interaction: &ModalSubmitInteraction,
 ) -> Result<()> {
     match interaction.data.custom_id.as_str() {
-        ID_INTRO_QUARANTINE => {
-            submit_intro_quarantined(ctx, interaction).await?;
-        }
+        intro::MODAL_ID => intro::submit(ctx, interaction).await,
 
-        ID_INTRO_SLASH => {
-            submit_intro_slash(ctx, interaction).await?;
-        }
-
-        _ => bail!("Unhandled custom_id: {:?}", interaction.data.custom_id),
+        _ => Ok(()),
     }
-
-    Ok(())
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn handle_event(ctx: impl Context, event: &poise::Event<'_>) -> crate::error::Result<()> {
+pub async fn handle_event(ctx: &impl Context, event: &poise::Event<'_>) -> Result<()> {
     match event {
         poise::Event::GuildMemberAddition { new_member } => {
-            guild_member_addition(&ctx, new_member).await?;
+            guild_member_addition(ctx, new_member).await
         }
 
         poise::Event::GuildMemberRemoval {
             guild_id,
             user,
             member_data_if_available: _,
-        } => {
-            guild_member_removal(&ctx, guild_id, user).await?;
-        }
+        } => guild_member_removal(ctx, guild_id, user).await,
 
         poise::Event::InteractionCreate {
             interaction: Interaction::MessageComponent(interaction),
-        } if interaction.data.custom_id.starts_with(ID_PREFIX) => {
-            message_component_interaction(&ctx, interaction).await?;
-        }
+        } => message_component_interaction(ctx, interaction).await,
+
         poise::Event::InteractionCreate {
             interaction: Interaction::ModalSubmit(interaction),
-        } if interaction.data.custom_id.starts_with(ID_PREFIX) => {
-            modal_submit_interaction(&ctx, interaction).await?;
-        }
+        } => modal_submit_interaction(ctx, interaction).await,
 
-        _ => {}
+        _ => Ok(()),
     }
-
-    Ok(())
 }
 
 #[poise::command(
@@ -271,7 +236,8 @@ pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Resul
 
     interaction
         .create_interaction_response(ctx.serenity_context, |response| {
-            create_intro_modal(ID_INTRO_SLASH, intro.as_ref(), response)
+            *response = intro::create_modal(intro.as_ref());
+            response
         })
         .await?;
 

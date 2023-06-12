@@ -87,7 +87,7 @@ async fn handle_event(
         ($($fn:expr),+ $(,)?) => {
             join!(
                 $(async {
-                    if let Err(error) = $fn(ctx, event).await {
+                    if let Err(error) = $fn(&ctx, event).await {
                         let framework_error = poise::FrameworkError::EventHandler {
                             error,
                             ctx: serenity_context,
