@@ -75,13 +75,22 @@ pub async fn message_component_interaction(
     interaction: &MessageComponentInteraction,
 ) -> Result<()> {
     match interaction.data.custom_id.as_str() {
-        intro::MODAL_ID => interaction
-            .create_interaction_response(ctx.serenity(), |response| {
-                *response = intro::create_modal(None);
-                response
-            })
-            .await
-            .map_err(Into::into),
+        intro::MODAL_ID => {
+            let member = interaction
+                .member
+                .as_ref()
+                .context("Interaction has no member")?;
+            let modal = intro::create_modal_for_member(ctx, member).await?;
+
+            interaction
+                .create_interaction_response(ctx.serenity(), |response| {
+                    *response = modal;
+                    response
+                })
+                .await?;
+
+            Ok(())
+        }
 
         _ => Ok(()),
     }
@@ -223,13 +232,13 @@ pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Resul
         bail!("Expected ApplicationCommandInteraction");
     };
 
-    let guild_id = ctx.guild_id().context("Context has no guild_id")?;
+    let member = ctx.author_member().await.context("Context has no member")?;
 
-    let intro = intro::get(&ctx, guild_id, ctx.author().id).await?;
+    let modal = intro::create_modal_for_member(&ctx, &member).await?;
 
     interaction
         .create_interaction_response(ctx.serenity_context, |response| {
-            *response = intro::create_modal(intro.as_ref());
+            *response = modal;
             response
         })
         .await?;

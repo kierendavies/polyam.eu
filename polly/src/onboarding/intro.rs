@@ -103,7 +103,35 @@ pub fn create_button() -> CreateButton {
     button
 }
 
-pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a> {
+pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Result<Option<Intro>> {
+    let mut tx = ctx.db().begin().await?;
+
+    let message = if let Some((channel_id, message_id)) =
+        persist::intro_message::get(&mut tx, guild_id, user_id).await?
+    {
+        channel_id
+            .message(ctx.serenity(), message_id)
+            .await
+            .map(Some)
+            .or_else(|err| {
+                if is_http_not_found(&err) {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            })?
+    } else {
+        None
+    };
+
+    tx.commit().await?;
+
+    let intro = message.map(Intro::from_message_embeds).transpose()?;
+
+    Ok(intro)
+}
+
+fn create_modal<'a>(existing_intro: Option<&Intro>) -> CreateInteractionResponse<'a> {
     let mut response = CreateInteractionResponse::default();
 
     response
@@ -122,7 +150,7 @@ pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a
                                     .required(true)
                                     .min_length(50)
                                     .max_length(1000);
-                                if let Some(intro) = prefill {
+                                if let Some(intro) = existing_intro {
                                     text.value(&intro.about_me);
                                 }
                                 text
@@ -136,7 +164,7 @@ pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a
                                     .placeholder("It's okay if you have none 💕")
                                     .required(true)
                                     .max_length(1000);
-                                if let Some(intro) = prefill {
+                                if let Some(intro) = existing_intro {
                                     text.value(&intro.polyamory_experience);
                                 }
                                 text
@@ -146,6 +174,15 @@ pub fn create_modal<'a>(prefill: Option<&Intro>) -> CreateInteractionResponse<'a
         });
 
     response
+}
+
+pub async fn create_modal_for_member<'a>(
+    ctx: &impl Context,
+    member: &Member,
+) -> Result<CreateInteractionResponse<'a>> {
+    let existing_intro = get(ctx, member.guild_id, member.user.id).await?;
+
+    Ok(create_modal(existing_intro.as_ref()))
 }
 
 fn create_embed(user: &User, intro: &Intro) -> CreateEmbed {
@@ -279,32 +316,4 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
     }
 
     Ok(())
-}
-
-pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Result<Option<Intro>> {
-    let mut tx = ctx.db().begin().await?;
-
-    let message = if let Some((channel_id, message_id)) =
-        persist::intro_message::get(&mut tx, guild_id, user_id).await?
-    {
-        channel_id
-            .message(ctx.serenity(), message_id)
-            .await
-            .map(Some)
-            .or_else(|err| {
-                if is_http_not_found(&err) {
-                    Ok(None)
-                } else {
-                    Err(err)
-                }
-            })?
-    } else {
-        None
-    };
-
-    tx.commit().await?;
-
-    let intro = message.map(Intro::from_message_embeds).transpose()?;
-
-    Ok(intro)
 }
