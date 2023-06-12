@@ -102,7 +102,8 @@ pub fn create_intro_modal<'a, 'b>(
                                     .style(InputTextStyle::Paragraph)
                                     .placeholder("I like long walks on the beach... 🏖")
                                     .required(true)
-                                    .min_length(50);
+                                    .min_length(50)
+                                    .max_length(1000);
                                 if let Some(intro) = intro {
                                     text.value(intro.about_me);
                                 }
@@ -115,7 +116,8 @@ pub fn create_intro_modal<'a, 'b>(
                                     .label(LABEL_POLYAMORY_EXPERIENCE)
                                     .style(InputTextStyle::Paragraph)
                                     .placeholder("It's okay if you have none 💕")
-                                    .required(true);
+                                    .required(true)
+                                    .max_length(1000);
                                 if let Some(intro) = intro {
                                     text.value(intro.polyamory_experience);
                                 }
