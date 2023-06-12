@@ -57,3 +57,10 @@ macro_rules! bail {
     };
 }
 pub(crate) use bail;
+
+pub fn is_http_not_found(err: &serenity::Error) -> bool {
+    match err {
+        serenity::Error::Http(inner) => inner.status_code() == Some(http::StatusCode::NOT_FOUND),
+        _ => false,
+    }
+}

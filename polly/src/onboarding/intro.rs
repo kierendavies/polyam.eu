@@ -1,5 +1,4 @@
 use anyhow::Context as _;
-use http::StatusCode;
 use poise::serenity_prelude::{
     ActionRowComponent,
     GuildId,
@@ -21,7 +20,10 @@ use serenity::builder::{
 use tracing::warn;
 
 use super::{persist, quarantine::unquarantine};
-use crate::{context::Context, error::Result};
+use crate::{
+    context::Context,
+    error::{is_http_not_found, Result},
+};
 
 pub const MODAL_ID: &str = "onboarding_intro";
 const ID_ABOUT_ME: &str = "about_me";
@@ -240,14 +242,17 @@ pub async fn get_intro_message(
     let message = if let Some((channel_id, message_id)) =
         persist::intro_message::get(&mut tx, guild_id, user_id).await?
     {
-        match channel_id.message(ctx.serenity(), message_id).await {
-            Ok(message) => Some(message),
-            Err(serenity::Error::Http(err)) if err.status_code() == Some(StatusCode::NOT_FOUND) => {
-                persist::intro_message::delete(&mut tx, guild_id, user_id).await?;
-                None
-            }
-            Err(err) => return Err(err.into()),
-        }
+        channel_id
+            .message(ctx.serenity(), message_id)
+            .await
+            .map(Some)
+            .or_else(|err| {
+                if is_http_not_found(&err) {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            })?
     } else {
         None
     };

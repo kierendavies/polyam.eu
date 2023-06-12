@@ -1,5 +1,4 @@
 use anyhow::Context as _;
-use http::StatusCode;
 use poise::serenity_prelude::{GuildId, Member, Message, UserId};
 use serenity::{builder::CreateMessage, model::Permissions};
 use tracing::info;
@@ -7,7 +6,7 @@ use tracing::info;
 use super::{intro, persist};
 use crate::{
     context::Context,
-    error::{bail, Result},
+    error::{bail, is_http_not_found, Result},
 };
 
 fn create_welcome_message<'a>(guild_name: &str, member: &Member) -> CreateMessage<'a> {
@@ -95,14 +94,13 @@ pub async fn delete_welcome_message(
         channel_id
             .delete_message(ctx.serenity(), message_id)
             .await
-            .or_else(|err| match err {
+            .or_else(|err| {
                 // If the message was already deleted, continue with deleting the database row.
-                serenity::Error::Http(inner)
-                    if inner.status_code() == Some(StatusCode::NOT_FOUND) =>
-                {
+                if is_http_not_found(&err) {
                     Ok(())
+                } else {
+                    Err(err)
                 }
-                _ => Err(err),
             })?;
 
         persist::welcome_message::delete(&mut tx, guild_id, user_id).await?;
