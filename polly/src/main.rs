@@ -113,7 +113,11 @@ pub async fn framework(
 ) -> Result<Arc<poise::Framework<UserData, Error>>, serenity::Error> {
     poise::Framework::builder()
         .token(token)
-        .intents(GatewayIntents::GUILD_MEMBERS)
+        .intents(
+            GatewayIntents::non_privileged()
+                | GatewayIntents::GUILD_MEMBERS
+                | GatewayIntents::MESSAGE_CONTENT,
+        )
         .setup(|serenity_context, ready, framework| {
             Box::pin(setup(serenity_context, ready, framework, config, db))
         })
