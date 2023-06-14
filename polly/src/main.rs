@@ -92,18 +92,28 @@ fn write_code_block_truncated(
     // The padding has no multi-byte chars, so `.len()` is the same as `.chars().count()`.
     const PADDING_LEN: usize = "```\n\n```\n(999999 bytes truncated)\n".len();
 
-    let limit_index = text
-        .char_indices()
-        .nth(limit - PADDING_LEN)
-        .map_or(text.len(), |(i, _)| i);
+    let (shown, hidden) = text.char_indices().nth(limit - PADDING_LEN).map_or(
+        // If the limit is past the end, show all text.
+        (text, ""),
+        // Otherwise try to split just before a line break.
+        |(limit_index, first_hidden)| {
+            let split_index = if first_hidden == '\n' {
+                // We're already at a line break.
+                limit_index
+            } else {
+                // Search for the last line break.
+                // If there isn't one, we have to split somewhere in the line.
+                text[..limit_index].rfind('\n').unwrap_or(limit_index)
+            };
 
-    // Try to split at a line break.
-    let split_index = text[..limit_index].rfind('\n').unwrap_or(limit_index);
-
-    let (shown, hidden) = text.split_at(split_index);
+            text.split_at(split_index)
+        },
+    );
 
     writeln!(w, "```\n{}\n```", shown.trim_end())?;
-    if !hidden.is_empty() {
+
+    // Report how much was truncated, unless it was only whitespace.
+    if !hidden.trim().is_empty() {
         writeln!(w, "({} bytes truncated)", hidden.len())?;
     }
 
