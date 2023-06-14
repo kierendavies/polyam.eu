@@ -7,16 +7,9 @@ use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    pub errors_channel: ChannelId,
     #[serde(deserialize_with = "deserialize_snowflake_map", flatten)]
     pub guilds: BTreeMap<GuildId, GuildConfig>,
-}
-
-impl Config {
-    pub fn guild(&self, id: GuildId) -> crate::error::Result<&GuildConfig> {
-        self.guilds
-            .get(&id)
-            .ok_or(anyhow!("No config for guild").into())
-    }
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -25,6 +18,14 @@ pub struct GuildConfig {
     pub quarantine_role: RoleId,
     pub quarantine_channel: ChannelId,
     pub intros_channel: ChannelId,
+}
+
+impl Config {
+    pub fn guild(&self, id: GuildId) -> crate::error::Result<&GuildConfig> {
+        self.guilds
+            .get(&id)
+            .ok_or(anyhow!("No config for guild").into())
+    }
 }
 
 // https://users.rust-lang.org/t/how-to-use-serde-to-deserialize-toml-key-as-u32/33231/3

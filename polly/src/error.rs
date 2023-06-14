@@ -46,6 +46,7 @@ macro_rules! error_from {
 
 error_from!(serenity::Error);
 error_from!(sqlx::Error);
+error_from!(std::fmt::Error);
 error_from!(std::io::Error);
 error_from!(toml::de::Error);
 

@@ -20,6 +20,22 @@ pub trait Context {
     }
 }
 
+impl<E> Context for poise::Context<'_, UserData, E> {
+    fn serenity(&self) -> &serenity::client::Context {
+        match self {
+            poise::Context::Application(ctx) => ctx.serenity_context,
+            poise::Context::Prefix(ctx) => ctx.serenity_context,
+        }
+    }
+
+    fn data(&self) -> &UserData {
+        match self {
+            poise::Context::Application(ctx) => ctx.data,
+            poise::Context::Prefix(ctx) => ctx.data,
+        }
+    }
+}
+
 impl<E> Context for poise::ApplicationContext<'_, UserData, E> {
     fn serenity(&self) -> &serenity::client::Context {
         self.serenity_context
