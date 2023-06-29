@@ -284,7 +284,17 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
         None => false,
     };
 
-    if is_from_quarantine {
+    let is_from_old_members_quarantine = match &interaction.message {
+        Some(message) => message.channel_id == config.old_members_quarantine_channel,
+        None => false,
+    };
+
+    if is_from_old_members_quarantine {
+        publish(ctx, &member, &intro).await?;
+        member
+            .remove_role(ctx.serenity(), config.old_members_quarantine_role)
+            .await?;
+    } else if is_from_quarantine {
         let ack_content = "Thanks for submitting your introduction. In the next few seconds, you'll get access to the rest of the server.";
         interaction
             .create_interaction_response(ctx.serenity(), |response| {

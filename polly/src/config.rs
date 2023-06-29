@@ -18,6 +18,8 @@ pub struct GuildConfig {
     pub quarantine_role: RoleId,
     pub quarantine_channel: ChannelId,
     pub intros_channel: ChannelId,
+    pub old_members_quarantine_role: RoleId,
+    pub old_members_quarantine_channel: ChannelId,
 }
 
 impl Config {

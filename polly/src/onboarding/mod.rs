@@ -1,4 +1,5 @@
 mod intro;
+pub(crate) mod old_members;
 mod persist;
 mod quarantine;
 

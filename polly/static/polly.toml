@@ -5,9 +5,13 @@ errors_channel = 1118126586965803120
 quarantine_role = 1065361955671515236
 quarantine_channel = 1065369112156573778
 intros_channel = 1065368417785368637
+old_members_quarantine_role = 1124002327112732862
+old_members_quarantine_channel = 1124008057643487233
 
 # Polyam.eu test
 [758379605555544076]
 quarantine_role = 1001465243316256798
 quarantine_channel = 1001464323958394881
 intros_channel = 1069663088644735017
+old_members_quarantine_role = 1001465243316256798
+old_members_quarantine_channel = 1001464323958394881
