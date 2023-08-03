@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt::Write as _};
 
 use anyhow::Context as _;
+use poise::serenity_prelude::Member;
 
 use super::{intro, persist};
 use crate::{
@@ -138,6 +139,24 @@ pub async fn kick_missing_intro(
     ctx: poise::ApplicationContext<'_, UserData, Error>,
     limit: u32,
 ) -> Result<()> {
+    async fn dm_and_kick(
+        ctx: &poise::ApplicationContext<'_, UserData, Error>,
+        member: &mut Member,
+    ) -> Result<()> {
+        let text = "You have been kicked from Polyam.eu because you were inactive. You can rejoin by visiting https://polyam.eu/.";
+
+        member
+            .user
+            .direct_message(ctx.serenity_context(), |message| message.content(text))
+            .await?;
+
+        member
+            .kick_with_reason(ctx.serenity_context(), "Did not update intro")
+            .await?;
+
+        Ok(())
+    }
+
     let guild = ctx.guild().context("Context has no guild")?;
     let config = ctx.config().guild(guild.id)?;
     let role_id = config.old_members_quarantine_role;
@@ -166,18 +185,15 @@ pub async fn kick_missing_intro(
         ctx.say(text).await?;
 
         for member in chunk {
-            member
-                .user
-                .direct_message(ctx.serenity_context(), |message| {
-                    message.content(format!(
-                        "You have been kicked from {} because you were inactive. You can rejoin by visiting https://polyam.eu/.",
-                        guild.name
-                    ))
-                })
+            if let Err(err) = dm_and_kick(&ctx, member).await {
+                ctx.say(format!(
+                    "Failed to kick {member}:\n\
+                    ```\n\
+                    {err:?}\n\
+                    ```"
+                ))
                 .await?;
-            member
-                .kick_with_reason(ctx.serenity_context(), "Did not update intro")
-                .await?;
+            };
         }
     }
 
