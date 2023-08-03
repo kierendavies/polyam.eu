@@ -38,9 +38,6 @@ fn commands() -> Vec<poise::Command<UserData, Error>> {
         bubblewrap(),
         onboarding::intro(),
         onboarding::onboarding_sync_db(),
-        onboarding::old_members::onboarding_migrate_welcome(),
-        onboarding::old_members::onboarding_migrate(),
-        onboarding::old_members::kick_missing_intro(),
     ]
 }
 
