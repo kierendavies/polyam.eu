@@ -107,7 +107,7 @@ pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Resu
     let mut tx = ctx.db().begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
-        persist::intro_message::get(&mut tx, guild_id, user_id).await?
+        persist::intro_message::get(&mut *tx, guild_id, user_id).await?
     {
         channel_id
             .message(ctx.serenity(), message_id)
@@ -235,7 +235,7 @@ async fn publish(ctx: &impl Context, member: &Member, intro: &Intro) -> Result<M
     let mut tx = ctx.db().begin().await?;
 
     let message = if let Some((channel_id, message_id)) =
-        persist::intro_message::get(&mut tx, member.guild_id, member.user.id).await?
+        persist::intro_message::get(&mut *tx, member.guild_id, member.user.id).await?
     {
         channel_id
             .edit_message(ctx.serenity(), message_id, |message| {
@@ -253,7 +253,7 @@ async fn publish(ctx: &impl Context, member: &Member, intro: &Intro) -> Result<M
             .await?;
 
         persist::intro_message::set(
-            &mut tx,
+            &mut *tx,
             member.guild_id,
             member.user.id,
             config.intros_channel,

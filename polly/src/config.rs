@@ -37,14 +37,14 @@ where
     K: From<u64> + Ord,
     V: de::Deserialize<'de>,
 {
-    let str_map = BTreeMap::<&str, V>::deserialize(deserializer)?;
+    let str_map = BTreeMap::<String, V>::deserialize(deserializer)?;
 
     let parsed_map = str_map
         .into_iter()
         .map(|(str_key, value)| match str_key.parse() {
             Ok(int_key) => Ok((K::from(int_key), value)),
             Err(_) => Err(de::Error::invalid_value(
-                de::Unexpected::Str(str_key),
+                de::Unexpected::Str(&str_key),
                 &"snowflake",
             )),
         })

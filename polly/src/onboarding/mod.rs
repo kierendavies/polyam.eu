@@ -184,7 +184,7 @@ pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Err
 
     let mut tx = ctx.data().db.begin().await?;
 
-    let persisted_intros = persist::intro_message::get_all(&mut tx, guild_id).await?;
+    let persisted_intros = persist::intro_message::get_all(&mut *tx, guild_id).await?;
     let persisted_intro_message_ids: HashSet<_> = persisted_intros
         .iter()
         .map(|(_, _, message_id)| *message_id)
@@ -197,15 +197,21 @@ pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Err
                 .first()
                 .context("Message has no mentions")?
                 .id;
-            persist::intro_message::set(&mut tx, guild_id, user_id, message.channel_id, message.id)
-                .await?;
+            persist::intro_message::set(
+                &mut *tx,
+                guild_id,
+                user_id,
+                message.channel_id,
+                message.id,
+            )
+            .await?;
             n_added += 1;
         }
     }
 
     for (user_id, _, message_id) in &persisted_intros {
         if !found_intro_message_ids.contains(message_id) {
-            persist::intro_message::delete(&mut tx, guild_id, *user_id).await?;
+            persist::intro_message::delete(&mut *tx, guild_id, *user_id).await?;
             n_deleted += 1;
         }
     }
@@ -229,7 +235,9 @@ pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Err
     skip(ctx),
 )]
 pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
-    let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) = ctx.interaction else {
+    let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) =
+        ctx.interaction
+    else {
         bail!("Expected ApplicationCommandInteraction");
     };
 

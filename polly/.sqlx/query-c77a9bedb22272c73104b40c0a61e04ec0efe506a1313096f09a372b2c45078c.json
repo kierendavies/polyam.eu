@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into onboarding_intro_messages (guild_id, user_id, channel_id, message_id) values ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c77a9bedb22272c73104b40c0a61e04ec0efe506a1313096f09a372b2c45078c"
+}

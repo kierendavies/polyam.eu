@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select channel_id, message_id from onboarding_intro_messages where guild_id = $1 and user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "channel_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "message_id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "931338f01b341c6c577db443781d02f4b35bd088a422a81e6400088dbce9273b"
+}

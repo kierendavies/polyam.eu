@@ -89,7 +89,7 @@ pub async fn delete_welcome_message(
     let mut tx = ctx.db().begin().await?;
 
     if let Some((channel_id, message_id)) =
-        persist::welcome_message::get(&mut tx, guild_id, user_id).await?
+        persist::welcome_message::get(&mut *tx, guild_id, user_id).await?
     {
         channel_id
             .delete_message(ctx.serenity(), message_id)
@@ -103,7 +103,7 @@ pub async fn delete_welcome_message(
                 }
             })?;
 
-        persist::welcome_message::delete(&mut tx, guild_id, user_id).await?;
+        persist::welcome_message::delete(&mut *tx, guild_id, user_id).await?;
     }
 
     tx.commit().await?;
