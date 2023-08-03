@@ -119,3 +119,69 @@ pub async fn onboarding_migrate(
 
     Ok(())
 }
+
+#[poise::command(
+    default_member_permissions = "ADMINISTRATOR",
+    guild_only,
+    owners_only,
+    required_permissions = "ADMINISTRATOR",
+    slash_command
+)]
+#[tracing::instrument(
+    fields(
+        ctx.id = ctx.id(),
+        ctx.guild_id = %ctx.guild_id().unwrap_or_default(),
+    ),
+    skip(ctx),
+)]
+pub async fn kick_missing_intro(
+    ctx: poise::ApplicationContext<'_, UserData, Error>,
+    limit: u32,
+) -> Result<()> {
+    let guild = ctx.guild().context("Context has no guild")?;
+    let config = ctx.config().guild(guild.id)?;
+    let role_id = config.old_members_quarantine_role;
+
+    let members = guild.members(ctx.serenity(), None, None).await?;
+    let n_members = members.len();
+
+    let mut to_kick = members;
+    to_kick.retain(|member| member.roles.contains(&role_id));
+    let n_elegible = to_kick.len();
+    to_kick.truncate(limit as usize);
+    let n_to_kick = to_kick.len();
+
+    ctx.say(format!(
+        "Total members: {n_members}\n\
+            Elegible to be kicked: {n_elegible}\n\
+            To be kicked now: {n_to_kick}",
+    ))
+    .await?;
+
+    for chunk in to_kick.chunks_mut(10) {
+        let mut text = String::from("Kicking:\n");
+        for member in &*chunk {
+            writeln!(text, "{member}")?;
+        }
+        ctx.say(text).await?;
+
+        for member in chunk {
+            member
+                .user
+                .direct_message(ctx.serenity_context(), |message| {
+                    message.content(format!(
+                        "You have been kicked from {} because you were inactive. You can rejoin by visiting https://polyam.eu/.",
+                        guild.name
+                    ))
+                })
+                .await?;
+            member
+                .kick_with_reason(ctx.serenity_context(), "Did not update intro")
+                .await?;
+        }
+    }
+
+    ctx.say("Done").await?;
+
+    Ok(())
+}
