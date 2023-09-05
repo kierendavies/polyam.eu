@@ -19,11 +19,11 @@ serenity = { version = "0.11", default-features = false, features = [
     "rustls_backend",
     "model",
 ] }
-shuttle-poise = "0.22"
-shuttle-runtime = "0.22"
-shuttle-secrets = "0.22"
-shuttle-shared-db = { version = "0.22", features = ["postgres"] }
-shuttle-static-folder = "0.22"
+shuttle-poise = "0.25"
+shuttle-runtime = "0.25"
+shuttle-secrets = "0.25"
+shuttle-shared-db = { version = "0.25", features = ["postgres"] }
+shuttle-static-folder = "0.25"
 sqlx = { version = "0.7", features = ["runtime-tokio"] }
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
