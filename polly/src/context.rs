@@ -1,15 +1,10 @@
 use sqlx::PgPool;
 
-use crate::{config::Config, error::Error};
-
-pub struct UserData {
-    pub config: Config,
-    pub db: PgPool,
-}
+use crate::{config::Config, Data, PoiseApplicationContext, PoiseContext, PoiseFrameworkContext};
 
 pub trait Context {
     fn serenity(&self) -> &serenity::client::Context;
-    fn data(&self) -> &UserData;
+    fn data(&self) -> &Data;
 
     fn config(&self) -> &Config {
         &self.data().config
@@ -20,7 +15,7 @@ pub trait Context {
     }
 }
 
-impl<E> Context for poise::Context<'_, UserData, E> {
+impl Context for PoiseContext<'_> {
     fn serenity(&self) -> &serenity::client::Context {
         match self {
             poise::Context::Application(ctx) => ctx.serenity_context,
@@ -28,7 +23,7 @@ impl<E> Context for poise::Context<'_, UserData, E> {
         }
     }
 
-    fn data(&self) -> &UserData {
+    fn data(&self) -> &Data {
         match self {
             poise::Context::Application(ctx) => ctx.data,
             poise::Context::Prefix(ctx) => ctx.data,
@@ -36,12 +31,12 @@ impl<E> Context for poise::Context<'_, UserData, E> {
     }
 }
 
-impl<E> Context for poise::ApplicationContext<'_, UserData, E> {
+impl Context for PoiseApplicationContext<'_> {
     fn serenity(&self) -> &serenity::client::Context {
         self.serenity_context
     }
 
-    fn data(&self) -> &UserData {
+    fn data(&self) -> &Data {
         self.data
     }
 }
@@ -50,7 +45,7 @@ impl<E> Context for poise::ApplicationContext<'_, UserData, E> {
 #[derive(Clone, Copy)]
 pub struct EventContext<'a> {
     pub serenity: &'a serenity::client::Context,
-    pub framework: poise::FrameworkContext<'a, UserData, Error>,
+    pub framework: PoiseFrameworkContext<'a>,
 }
 
 impl Context for EventContext<'_> {
@@ -58,7 +53,7 @@ impl Context for EventContext<'_> {
         self.serenity
     }
 
-    fn data(&self) -> &UserData {
+    fn data(&self) -> &Data {
         self.framework.user_data
     }
 }

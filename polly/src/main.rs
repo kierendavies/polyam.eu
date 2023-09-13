@@ -2,7 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 mod commands;
-pub mod config;
+mod config;
 mod context;
 mod error;
 mod onboarding;
@@ -29,11 +29,25 @@ use tracing::{error, warn};
 use crate::{
     commands::bubblewrap::bubblewrap,
     config::Config,
-    context::{Context, EventContext, UserData},
+    context::{Context, EventContext},
     error::Error,
 };
 
-fn commands() -> Vec<poise::Command<UserData, Error>> {
+struct DataInner {
+    pub config: Config,
+    pub db: PgPool,
+}
+
+type Data = Arc<DataInner>;
+
+type PoiseApplicationContext<'a> = poise::ApplicationContext<'a, Data, Error>;
+type PoiseCommand = poise::Command<Data, Error>;
+type PoiseContext<'a> = poise::Context<'a, Data, Error>;
+type PoiseFramework = poise::Framework<Data, Error>;
+type PoiseFrameworkContext<'a> = poise::FrameworkContext<'a, Data, Error>;
+type PoiseFrameworkError<'a> = poise::FrameworkError<'a, Data, Error>;
+
+fn commands() -> Vec<PoiseCommand> {
     vec![
         bubblewrap(),
         onboarding::intro(),
@@ -45,10 +59,10 @@ fn commands() -> Vec<poise::Command<UserData, Error>> {
 async fn setup(
     serenity_context: &serenity::client::Context,
     ready: &Ready,
-    framework: &poise::Framework<UserData, Error>,
+    framework: &PoiseFramework,
     config: Config,
     db: PgPool,
-) -> crate::error::Result<UserData> {
+) -> crate::error::Result<Data> {
     for guild in &ready.guilds {
         poise::builtins::register_in_guild(
             serenity_context,
@@ -58,14 +72,16 @@ async fn setup(
         .await?;
     }
 
-    Ok(UserData { config, db })
+    let data = Arc::new(DataInner { config, db });
+
+    Ok(data)
 }
 
 const ERROR_REPLY_TEXT: &str = "😵‍💫 Something went wrong. I'll let my admins know about it.";
 
 async fn write_command_info(
     w: &mut impl fmt::Write,
-    ctx: &poise::Context<'_, UserData, Error>,
+    ctx: &PoiseContext<'_>,
     reply: &ReplyHandle<'_>,
 ) -> crate::error::Result<()> {
     let reply_link = reply.message().await?.link_ensured(ctx).await;
@@ -124,12 +140,11 @@ async fn on_event_handler_error(
     error: Error,
     serenity_context: &serenity::client::Context,
     event: &poise::Event<'_>,
-    framework_context: poise::FrameworkContext<'_, UserData, Error>,
+    framework_context: PoiseFrameworkContext<'_>,
 ) -> crate::error::Result<()> {
     error!(?event, ?error, "Event handler error");
 
     let mut text = String::new();
-
     writeln!(text, "**Event handler error**")?;
 
     let event_text_limit = (MESSAGE_CODE_LIMIT - text.chars().count()) / 2;
@@ -146,10 +161,7 @@ async fn on_event_handler_error(
     Ok(())
 }
 
-async fn on_command_error(
-    error: Error,
-    ctx: poise::Context<'_, UserData, Error>,
-) -> crate::error::Result<()> {
+async fn on_command_error(error: Error, ctx: PoiseContext<'_>) -> crate::error::Result<()> {
     error!(?error, "Command error");
 
     let reply = ctx.say(ERROR_REPLY_TEXT).await?;
@@ -171,7 +183,7 @@ async fn on_command_error(
 
 async fn on_command_panic(
     payload: Option<String>,
-    ctx: poise::Context<'_, UserData, Error>,
+    ctx: PoiseContext<'_>,
 ) -> crate::error::Result<()> {
     error!(payload, "Command panic");
 
@@ -195,7 +207,7 @@ async fn on_command_panic(
     Ok(())
 }
 
-async fn on_error(error: poise::FrameworkError<'_, UserData, Error>) {
+async fn on_error(error: PoiseFrameworkError<'_>) {
     let handled = match error {
         poise::FrameworkError::EventHandler {
             error,
@@ -222,8 +234,8 @@ async fn on_error(error: poise::FrameworkError<'_, UserData, Error>) {
 async fn handle_event(
     serenity_context: &serenity::client::Context,
     event: &poise::Event<'_>,
-    framework_context: poise::FrameworkContext<'_, UserData, Error>,
-    _user_data: &UserData,
+    framework_context: PoiseFrameworkContext<'_>,
+    _user_data: &Data,
 ) -> crate::error::Result<()> {
     let ctx = EventContext {
         serenity: serenity_context,
@@ -253,11 +265,11 @@ async fn handle_event(
     Ok(())
 }
 
-pub async fn framework(
+async fn framework(
     token: String,
     config: Config,
     db: PgPool,
-) -> Result<Arc<poise::Framework<UserData, Error>>, serenity::Error> {
+) -> Result<Arc<PoiseFramework>, serenity::Error> {
     poise::Framework::builder()
         .token(token)
         .intents(
@@ -290,7 +302,7 @@ async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
     #[shuttle_shared_db::Postgres] db: PgPool,
-) -> ShuttlePoise<UserData, Error> {
+) -> ShuttlePoise<Data, Error> {
     let token = secret_store
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;

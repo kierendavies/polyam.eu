@@ -21,8 +21,9 @@ use serenity::futures::TryStreamExt;
 
 use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
-    context::{Context, UserData},
-    error::{bail, Error, Result},
+    context::Context,
+    error::{bail, Result},
+    PoiseApplicationContext,
 };
 
 #[tracing::instrument(
@@ -156,7 +157,7 @@ pub async fn handle_event(ctx: &impl Context, event: &poise::Event<'_>) -> Resul
     ),
     skip(ctx),
 )]
-pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
+pub async fn onboarding_sync_db(ctx: PoiseApplicationContext<'_>) -> Result<()> {
     ctx.defer().await?;
 
     let bot_id = ctx.framework().bot_id;
@@ -233,7 +234,7 @@ pub async fn onboarding_sync_db(ctx: poise::ApplicationContext<'_, UserData, Err
     ),
     skip(ctx),
 )]
-pub async fn intro(ctx: poise::ApplicationContext<'_, UserData, Error>) -> Result<()> {
+pub async fn intro(ctx: PoiseApplicationContext<'_>) -> Result<()> {
     let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) =
         ctx.interaction
     else {
