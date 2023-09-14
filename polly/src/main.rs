@@ -5,32 +5,26 @@ mod commands;
 mod config;
 mod context;
 mod error;
+mod error_reporting;
 mod onboarding;
 
-use std::{
-    fmt::{self, Write as _},
-    fs,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::Context as _;
 use poise::{
     futures_util::join,
     serenity_prelude::{GatewayIntents, Ready},
-    ReplyHandle,
 };
-use serenity::{constants::MESSAGE_CODE_LIMIT, prelude::Mentionable};
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 use sqlx::PgPool;
-use tracing::{error, warn};
 
 use crate::{
     commands::bubblewrap::bubblewrap,
     config::Config,
-    context::{Context, EventContext},
+    context::EventContext,
     error::Error,
+    error_reporting::report_error,
 };
 
 struct DataInner {
@@ -77,156 +71,31 @@ async fn setup(
     Ok(data)
 }
 
-const ERROR_REPLY_TEXT: &str = "😵‍💫 Something went wrong. I'll let my admins know about it.";
+async fn on_error(err: PoiseFrameworkError<'_>) {
+    const ERROR_REPLY_TEXT: &str = "😵‍💫 Something went wrong. I'll let my admins know about it.";
 
-async fn write_command_info(
-    w: &mut impl fmt::Write,
-    ctx: &PoiseContext<'_>,
-    reply: &ReplyHandle<'_>,
-) -> crate::error::Result<()> {
-    let reply_link = reply.message().await?.link_ensured(ctx).await;
+    async fn inner(err: PoiseFrameworkError<'_>) -> crate::error::Result<()> {
+        match err {
+            poise::FrameworkError::Command { ctx, .. }
+            | poise::FrameworkError::CommandPanic { ctx, .. } => {
+                ctx.say(ERROR_REPLY_TEXT).await?;
+                report_error(err).await?;
+            }
 
-    write!(w, "{} in ", ctx.author().mention())?;
-    if let Some(guild) = ctx.partial_guild().await {
-        write!(w, "`{}` ({})", guild.name, guild.id,)?;
-    } else {
-        write!(w, "DM")?;
-    }
-    writeln!(w, " {} {}", ctx.channel_id().mention(), reply_link)?;
+            poise::FrameworkError::EventHandler { .. } => {
+                report_error(err).await?;
+            }
 
-    writeln!(w, "`{}`", ctx.invocation_string())?;
-
-    Ok(())
-}
-
-fn write_code_block_truncated(
-    w: &mut impl fmt::Write,
-    limit: usize,
-    text: &str,
-) -> crate::error::Result<()> {
-    // Discord measures length in Unicode codepoints.
-    // The padding has no multi-byte chars, so `.len()` is the same as `.chars().count()`.
-    const PADDING_LEN: usize = "```\n\n```\n(999999 bytes truncated)\n".len();
-
-    let (shown, hidden) = text.char_indices().nth(limit - PADDING_LEN).map_or(
-        // If the limit is past the end, show all text.
-        (text, ""),
-        // Otherwise try to split just before a line break.
-        |(limit_index, first_hidden)| {
-            let split_index = if first_hidden == '\n' {
-                // We're already at a line break.
-                limit_index
-            } else {
-                // Search for the last line break.
-                // If there isn't one, we have to split somewhere in the line.
-                text[..limit_index].rfind('\n').unwrap_or(limit_index)
-            };
-
-            text.split_at(split_index)
-        },
-    );
-
-    writeln!(w, "```\n{}\n```", shown.trim_end())?;
-
-    // Report how much was truncated, unless it was only whitespace.
-    if !hidden.trim().is_empty() {
-        writeln!(w, "({} bytes truncated)", hidden.len())?;
-    }
-
-    Ok(())
-}
-
-async fn on_event_handler_error(
-    error: Error,
-    serenity_context: &serenity::client::Context,
-    event: &poise::Event<'_>,
-    framework_context: PoiseFrameworkContext<'_>,
-) -> crate::error::Result<()> {
-    error!(?event, ?error, "Event handler error");
-
-    let mut text = String::new();
-    writeln!(text, "**Event handler error**")?;
-
-    let event_text_limit = (MESSAGE_CODE_LIMIT - text.chars().count()) / 2;
-    let event_text = format!("{event:?}");
-    write_code_block_truncated(&mut text, event_text_limit, &event_text)?;
-
-    let error_text_limit = MESSAGE_CODE_LIMIT - text.chars().count();
-    let error_text = format!("{error:?}");
-    write_code_block_truncated(&mut text, error_text_limit, &error_text)?;
-
-    let errors_channel = framework_context.user_data.config.errors_channel;
-    errors_channel.say(serenity_context, text).await?;
-
-    Ok(())
-}
-
-async fn on_command_error(error: Error, ctx: PoiseContext<'_>) -> crate::error::Result<()> {
-    error!(?error, "Command error");
-
-    let reply = ctx.say(ERROR_REPLY_TEXT).await?;
-
-    let mut text = String::new();
-    writeln!(text, "**Command error**")?;
-
-    write_command_info(&mut text, &ctx, &reply).await?;
-
-    let error_text_limit = MESSAGE_CODE_LIMIT - text.chars().count();
-    let error_text = format!("{error:?}");
-    write_code_block_truncated(&mut text, error_text_limit, &error_text)?;
-
-    let errors_channel = ctx.config().errors_channel;
-    errors_channel.say(ctx, text).await?;
-
-    Ok(())
-}
-
-async fn on_command_panic(
-    payload: Option<String>,
-    ctx: PoiseContext<'_>,
-) -> crate::error::Result<()> {
-    error!(payload, "Command panic");
-
-    let reply = ctx.say(ERROR_REPLY_TEXT).await?;
-
-    let mut text = String::new();
-    writeln!(text, "**Command panic**")?;
-
-    write_command_info(&mut text, &ctx, &reply).await?;
-
-    if let Some(payload) = payload {
-        let payload_limit = MESSAGE_CODE_LIMIT - text.chars().count();
-        write_code_block_truncated(&mut text, payload_limit, &payload)?;
-    } else {
-        writeln!(text, "No payload")?;
-    }
-
-    let errors_channel = ctx.config().errors_channel;
-    errors_channel.say(ctx, text).await?;
-
-    Ok(())
-}
-
-async fn on_error(error: PoiseFrameworkError<'_>) {
-    let handled = match error {
-        poise::FrameworkError::EventHandler {
-            error,
-            ctx,
-            event,
-            framework,
-        } => on_event_handler_error(error, ctx, event, framework).await,
-
-        poise::FrameworkError::Command { error, ctx } => on_command_error(error, ctx).await,
-
-        poise::FrameworkError::CommandPanic { payload, ctx } => {
-            on_command_panic(payload, ctx).await
+            _ => {
+                poise::builtins::on_error(err).await?;
+            }
         }
 
-        error => poise::builtins::on_error(error).await.map_err(Into::into),
-    };
+        Ok(())
+    }
 
-    if let Err(error) = handled {
-        error!(?error, "Error while handling error");
+    if let Err(handling_err) = inner(err).await {
+        tracing::error!(error = ?handling_err, "Error while handling error");
     }
 }
 
