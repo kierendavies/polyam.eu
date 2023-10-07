@@ -56,6 +56,9 @@ pub async fn auto_delete(ctx: &impl Context) -> Result<()> {
                 break;
             }
 
+            let from_timestamp = *to_delete.first().unwrap().timestamp;
+            let to_timestamp = *to_delete.last().unwrap().timestamp;
+            tracing::info!(n = to_delete.len(), %from_timestamp, %to_timestamp, "Deleting messages");
             delete_messages(ctx, now, cfg.channel, to_delete).await?;
 
             // If we already received any message that is too new, then all subsequent messages will also be too new.
