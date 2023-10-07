@@ -2,6 +2,20 @@ use std::{future::Future, time::Duration};
 
 use crate::{context::Context, error::Result, error_reporting::report_background_task_error};
 
+async fn run<'ctx, Ctx, Fut, F>(task_name: &str, ctx: &'ctx Ctx, f: F)
+where
+    Ctx: Context,
+    Fut: Future<Output = Result<()>>,
+    F: Fn(&'ctx Ctx) -> Fut,
+{
+    tracing::info!(task_name, "Running task");
+    if let Err(err) = f(ctx).await {
+        if let Err(handling_err) = report_background_task_error(task_name, ctx, err).await {
+            tracing::error!(error = ?handling_err, "Error while handling error");
+        }
+    }
+}
+
 pub async fn periodic<'ctx, Ctx, Fut, F>(task_name: &str, period: Duration, ctx: &'ctx Ctx, f: F)
 where
     Ctx: Context,
@@ -13,12 +27,6 @@ where
 
     loop {
         timer.tick().await;
-
-        tracing::info!(task_name, "Running scheduled task");
-        if let Err(err) = f(ctx).await {
-            if let Err(handling_err) = report_background_task_error(task_name, ctx, err).await {
-                tracing::error!(error = ?handling_err, "Error while handling error");
-            }
-        }
+        run(task_name, ctx, &f).await;
     }
 }
