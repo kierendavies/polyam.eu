@@ -29,7 +29,7 @@ use crate::{
     error_reporting::report_error,
 };
 
-struct DataInner {
+pub struct DataInner {
     pub config: Config,
     pub db: PgPool,
 }
