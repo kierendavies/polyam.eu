@@ -1,14 +1,16 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+mod auto_delete;
 mod commands;
 mod config;
 mod context;
 mod error;
 mod error_reporting;
 mod onboarding;
+mod task;
 
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Context as _;
 use poise::{
@@ -20,9 +22,9 @@ use shuttle_secrets::SecretStore;
 use sqlx::PgPool;
 
 use crate::{
+    auto_delete::auto_delete,
     commands::bubblewrap::bubblewrap,
     config::Config,
-    context::EventContext,
     error::Error,
     error_reporting::report_error,
 };
@@ -68,6 +70,25 @@ async fn setup(
 
     let data = Arc::new(DataInner { config, db });
 
+    macro_rules! spawn_periodic {
+        ($task:ident, $secs:expr) => {{
+            let ctx = context::Owned {
+                serenity: serenity_context.clone(),
+                data: Arc::clone(&data),
+            };
+
+            tokio::spawn(async move {
+                task::periodic(stringify!($task), Duration::from_secs($secs), &ctx, $task).await;
+            });
+        }};
+
+        ($task:ident, $mins:literal m) => {
+            spawn_periodic!($task, $mins * 60)
+        };
+    }
+
+    spawn_periodic!(auto_delete, 1 m);
+
     Ok(data)
 }
 
@@ -106,7 +127,7 @@ async fn handle_event(
     framework_context: PoiseFrameworkContext<'_>,
     _user_data: &Data,
 ) -> crate::error::Result<()> {
-    let ctx = EventContext {
+    let ctx = context::Event {
         serenity: serenity_context,
         framework: framework_context,
     };

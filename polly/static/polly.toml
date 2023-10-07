@@ -11,3 +11,8 @@ intros_channel = 1065368417785368637
 quarantine_role = 1001465243316256798
 quarantine_channel = 1001464323958394881
 intros_channel = 1069663088644735017
+
+[[auto_delete]]
+# Polyam.eu #nsfw-pics
+channel = 755023176160772126
+after = "P1W"

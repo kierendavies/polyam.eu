@@ -175,3 +175,24 @@ pub async fn report_error(err: PoiseFrameworkError<'_>) -> Result<()> {
         _ => bail!("Reporting not supported for this error variant"),
     }
 }
+
+pub async fn report_background_task_error<C: Context>(
+    task_name: &str,
+    ctx: &C,
+    error: Error,
+) -> crate::error::Result<()> {
+    tracing::error!(?error, task_name, "Background task error");
+
+    let mut text = String::new();
+    writeln!(text, "**Background task error**")?;
+    writeln!(text, "`{task_name}`")?;
+
+    let error_text_limit = MESSAGE_CODE_LIMIT - text.chars().count();
+    let error_text = format!("{error:?}");
+    write_code_block_truncated(&mut text, error_text_limit, &error_text)?;
+
+    let errors_channel = ctx.config().errors_channel;
+    errors_channel.say(ctx.serenity(), text).await?;
+
+    Ok(())
+}

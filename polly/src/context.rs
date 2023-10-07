@@ -41,19 +41,34 @@ impl Context for PoiseApplicationContext<'_> {
     }
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Copy)]
-pub struct EventContext<'a> {
+pub struct Event<'a> {
     pub serenity: &'a serenity::client::Context,
     pub framework: PoiseFrameworkContext<'a>,
 }
 
-impl Context for EventContext<'_> {
+impl Context for Event<'_> {
     fn serenity(&self) -> &serenity::client::Context {
         self.serenity
     }
 
     fn data(&self) -> &Data {
         self.framework.user_data
+    }
+}
+
+#[derive(Clone)]
+pub struct Owned {
+    pub serenity: serenity::client::Context,
+    pub data: Data,
+}
+
+impl Context for Owned {
+    fn serenity(&self) -> &serenity::client::Context {
+        &self.serenity
+    }
+
+    fn data(&self) -> &Data {
+        &self.data
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::anyhow;
 use poise::serenity_prelude::{ChannelId, GuildId, RoleId};
@@ -10,6 +10,7 @@ pub struct Config {
     pub errors_channel: ChannelId,
     #[serde(deserialize_with = "deserialize_snowflake_map", flatten)]
     pub guilds: BTreeMap<GuildId, GuildConfig>,
+    pub auto_delete: Vec<AutoDeleteConfig>,
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -18,6 +19,14 @@ pub struct GuildConfig {
     pub quarantine_role: RoleId,
     pub quarantine_channel: ChannelId,
     pub intros_channel: ChannelId,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Deserialize)]
+pub struct AutoDeleteConfig {
+    pub channel: ChannelId,
+    #[serde(deserialize_with = "deserialize_duration")]
+    pub after: Duration,
 }
 
 impl Config {
@@ -49,4 +58,15 @@ where
         .collect::<Result<_, _>>()?;
 
     Ok(parsed_map)
+}
+
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<std::time::Duration, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let iso_duration = iso8601::duration(&s).map_err(de::Error::custom)?;
+
+    Ok(iso_duration.into())
 }
