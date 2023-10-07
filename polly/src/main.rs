@@ -10,7 +10,7 @@ mod error_reporting;
 mod onboarding;
 mod task;
 
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use anyhow::Context as _;
 use poise::{
@@ -190,15 +190,14 @@ async fn framework(
 #[shuttle_runtime::main]
 async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
-    #[shuttle_static_folder::StaticFolder] static_folder: PathBuf,
     #[shuttle_shared_db::Postgres] db: PgPool,
 ) -> ShuttlePoise<Data, Error> {
     let token = secret_store
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;
 
-    let config: Config = toml::from_str(&fs::read_to_string(static_folder.join("polly.toml"))?)
-        .context("Parsing config")?;
+    let config: Config =
+        toml::from_str(&fs::read_to_string("polly.toml")?).context("Parsing config")?;
 
     sqlx::migrate!()
         .run(&db)
