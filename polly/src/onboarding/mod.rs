@@ -285,3 +285,50 @@ pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn kick_inactive(ctx: &impl Context) -> Result<()> {
+    const INACTIVE_DAYS: i64 = 7;
+    const REASON: &str = "Onboarding not completed"; // Shows in the audit log.
+
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(INACTIVE_DAYS);
+
+    for &guild_id in ctx.config().guilds.keys() {
+        let guild_name = guild_id
+            .name(ctx.serenity())
+            .context("Guild name not in cache")?;
+
+        let message = format!(
+            "You were kicked from {guild_name} because you did not submit an introduction. \
+            You can join again using an invite link."
+        );
+
+        guild_id
+            .members_iter(ctx.serenity())
+            .err_into::<Error>()
+            .try_for_each(|member| {
+                // Needed to satisfy the borrow checker.
+                let message = message.as_str();
+
+                async move {
+                    let quarantined = member
+                        .roles
+                        .contains(&ctx.config().guild(guild_id)?.quarantine_role);
+                    let old = member
+                        .joined_at
+                        .is_some_and(|joined_at| *joined_at < cutoff);
+
+                    if quarantined && old {
+                        member.kick_with_reason(ctx.serenity(), REASON).await?;
+
+                        let dm_channel = member.user.create_dm_channel(ctx.serenity()).await?;
+                        dm_channel.say(ctx.serenity(), message).await?;
+                    }
+
+                    Ok(())
+                }
+            })
+            .await?;
+    }
+
+    Ok(())
+}

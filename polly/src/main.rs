@@ -85,10 +85,15 @@ async fn setup(
         ($task:path, $mins:literal m) => {
             spawn_periodic!($task, $mins * 60)
         };
+
+        ($task:path, $hours:literal h) => {
+            spawn_periodic!($task, $hours * 60 * 60)
+        };
     }
 
     spawn_periodic!(auto_delete, 1 m);
     spawn_periodic!(onboarding::check_quarantine, 10 m);
+    spawn_periodic!(onboarding::kick_inactive, 1 h);
 
     Ok(data)
 }
