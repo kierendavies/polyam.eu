@@ -21,6 +21,7 @@ use serenity::futures::TryStreamExt;
 
 use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
+    config::GuildConfig,
     context::Context,
     error::{bail, Error, Result},
     PoiseApplicationContext,
@@ -263,8 +264,23 @@ pub async fn intro(ctx: PoiseApplicationContext<'_>) -> Result<()> {
     Ok(())
 }
 
+fn connected_configured_guilds(
+    ctx: &impl Context,
+) -> impl Iterator<Item = (GuildId, &'_ GuildConfig)> {
+    ctx.serenity()
+        .cache
+        .guilds()
+        .into_iter()
+        .filter_map(|guild_id| {
+            ctx.config()
+                .guilds
+                .get(&guild_id)
+                .map(|config| (guild_id, config))
+        })
+}
+
 pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
-    for &guild_id in ctx.config().guilds.keys() {
+    for (guild_id, config) in connected_configured_guilds(ctx) {
         guild_id
             .members_iter(ctx.serenity())
             .err_into::<Error>()
@@ -273,9 +289,7 @@ pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
                 let introduced = persist::intro_message::get(ctx.db(), guild_id, member.user.id)
                     .await?
                     .is_some();
-                let quarantined = member
-                    .roles
-                    .contains(&ctx.config().guild(guild_id)?.quarantine_role);
+                let quarantined = member.roles.contains(&config.quarantine_role);
 
                 if !introduced && !quarantined {
                     tracing::warn!(
@@ -301,10 +315,10 @@ pub async fn kick_inactive(ctx: &impl Context) -> Result<()> {
 
     let cutoff = chrono::Utc::now() - chrono::Duration::days(INACTIVE_DAYS);
 
-    for &guild_id in ctx.config().guilds.keys() {
+    for (guild_id, config) in connected_configured_guilds(ctx) {
         let guild_name = guild_id
             .name(ctx.serenity())
-            .context("Guild name not in cache")?;
+            .context("Guild not available in cache")?;
 
         let message = format!(
             "You were kicked from {guild_name} because you did not submit an introduction. \
@@ -320,9 +334,7 @@ pub async fn kick_inactive(ctx: &impl Context) -> Result<()> {
                 let message = message.as_str();
 
                 async move {
-                    let quarantined = member
-                        .roles
-                        .contains(&ctx.config().guild(guild_id)?.quarantine_role);
+                    let quarantined = member.roles.contains(&config.quarantine_role);
                     let old = member
                         .joined_at
                         .is_some_and(|joined_at| *joined_at < cutoff);
