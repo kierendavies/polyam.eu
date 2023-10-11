@@ -71,7 +71,7 @@ async fn setup(
     let data = Arc::new(DataInner { config, db });
 
     macro_rules! spawn_periodic {
-        ($task:ident, $secs:expr) => {{
+        ($task:path, $secs:expr) => {{
             let ctx = context::Owned {
                 serenity: serenity_context.clone(),
                 data: Arc::clone(&data),
@@ -82,12 +82,13 @@ async fn setup(
             });
         }};
 
-        ($task:ident, $mins:literal m) => {
+        ($task:path, $mins:literal m) => {
             spawn_periodic!($task, $mins * 60)
         };
     }
 
     spawn_periodic!(auto_delete, 1 m);
+    spawn_periodic!(onboarding::check_quarantine, 10 m);
 
     Ok(data)
 }

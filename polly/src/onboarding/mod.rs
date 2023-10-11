@@ -22,7 +22,7 @@ use serenity::futures::TryStreamExt;
 use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
     context::Context,
-    error::{bail, Result},
+    error::{bail, Error, Result},
     PoiseApplicationContext,
 };
 
@@ -251,6 +251,37 @@ pub async fn intro(ctx: PoiseApplicationContext<'_>) -> Result<()> {
             response
         })
         .await?;
+
+    Ok(())
+}
+
+pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
+    for &guild_id in ctx.config().guilds.keys() {
+        guild_id
+            .members_iter(ctx.serenity())
+            .err_into::<Error>()
+            .try_for_each(|mut member| async move {
+                let introduced = persist::intro_message::get(ctx.db(), guild_id, member.user.id)
+                    .await?
+                    .is_some();
+                let quarantined = member
+                    .roles
+                    .contains(&ctx.config().guild(guild_id)?.quarantine_role);
+
+                if !introduced && !quarantined {
+                    tracing::warn!(
+                        %member.guild_id,
+                        %member.user.id,
+                        member.user.tag = member.user.tag(),
+                        "Member has no intro and is not quarantined",
+                    );
+                    quarantine(ctx, &mut member).await?;
+                }
+
+                Ok(())
+            })
+            .await?;
+    }
 
     Ok(())
 }
