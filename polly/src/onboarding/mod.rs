@@ -35,6 +35,10 @@ use crate::{
     skip_all,
 )]
 async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()> {
+    if member.user.bot {
+        return Ok(());
+    }
+
     let mut member = member.clone();
 
     if intro::get(ctx, member.guild_id, member.user.id)
@@ -56,6 +60,10 @@ async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()
     skip_all,
 )]
 async fn guild_member_removal(ctx: &impl Context, guild_id: &GuildId, user: &User) -> Result<()> {
+    if user.bot {
+        return Ok(());
+    }
+
     delete_welcome_message(ctx, *guild_id, user.id).await?;
 
     Ok(())
@@ -260,6 +268,7 @@ pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
         guild_id
             .members_iter(ctx.serenity())
             .err_into::<Error>()
+            .try_filter(|member| future::ready(!member.user.bot))
             .try_for_each(|mut member| async move {
                 let introduced = persist::intro_message::get(ctx.db(), guild_id, member.user.id)
                     .await?
@@ -305,6 +314,7 @@ pub async fn kick_inactive(ctx: &impl Context) -> Result<()> {
         guild_id
             .members_iter(ctx.serenity())
             .err_into::<Error>()
+            .try_filter(|member| future::ready(!member.user.bot))
             .try_for_each(|member| {
                 // Needed to satisfy the borrow checker.
                 let message = message.as_str();
