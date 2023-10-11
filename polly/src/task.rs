@@ -1,5 +1,8 @@
 use std::{future::Future, time::Duration};
 
+use rand::prelude::Distribution;
+use tokio::time::Instant;
+
 use crate::{context::Context, error::Result, error_reporting::report_background_task_error};
 
 async fn run<'ctx, Ctx, Fut, F>(task_name: &str, ctx: &'ctx Ctx, f: F)
@@ -22,7 +25,12 @@ where
     Fut: Future<Output = Result<()>>,
     F: Fn(&'ctx Ctx) -> Fut,
 {
-    let mut timer = tokio::time::interval(period);
+    const MAX_DELAY: Duration = Duration::from_secs(60);
+
+    let init_delay = rand::distributions::Uniform::new(Duration::ZERO, period.min(MAX_DELAY))
+        .sample(&mut rand::thread_rng());
+
+    let mut timer = tokio::time::interval_at(Instant::now() + init_delay, period);
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
