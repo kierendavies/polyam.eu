@@ -340,10 +340,10 @@ pub async fn kick_inactive(ctx: &impl Context) -> Result<()> {
                         .is_some_and(|joined_at| *joined_at < cutoff);
 
                     if quarantined && old {
-                        member.kick_with_reason(ctx.serenity(), REASON).await?;
-
                         let dm_channel = member.user.create_dm_channel(ctx.serenity()).await?;
                         dm_channel.say(ctx.serenity(), message).await?;
+
+                        member.kick_with_reason(ctx.serenity(), REASON).await?;
                     }
 
                     Ok(())
