@@ -214,5 +214,18 @@ async fn shuttle_main(
         .await
         .context("Creating framework")?;
 
+    // https://killavus.github.io/posts/thread-pool-graceful-shutdown/
+    tokio::spawn({
+        let shard_manager = framework.shard_manager().clone();
+
+        async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to register Ctrl-C handler");
+
+            shard_manager.lock().await.shutdown_all().await;
+        }
+    });
+
     Ok(framework.into())
 }
