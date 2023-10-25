@@ -28,7 +28,7 @@ shuttle-shared-db = { version = "0.30", features = ["postgres"] }
 sqlx = { version = "0.7", features = ["runtime-tokio"] }
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
-toml = "0.7"
+toml = "0.8"
 tracing = "0.1"
 tracing-error = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
