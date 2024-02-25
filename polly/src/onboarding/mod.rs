@@ -70,6 +70,16 @@ async fn guild_member_removal(ctx: &impl Context, guild_id: &GuildId, user: &Use
     Ok(())
 }
 
+async fn guild_member_update(ctx: &impl Context, member: &Member) -> Result<()> {
+    if member.user.bot {
+        return Ok(());
+    }
+
+    intro::update_avatar(ctx, member).await?;
+
+    Ok(())
+}
+
 #[tracing::instrument(
     fields(
         %interaction.id,
@@ -139,6 +149,11 @@ pub async fn handle_event(ctx: &impl Context, event: &poise::Event<'_>) -> Resul
             user,
             member_data_if_available: _,
         } => guild_member_removal(ctx, guild_id, user).await,
+
+        poise::Event::GuildMemberUpdate {
+            old_if_available: _,
+            new,
+        } => guild_member_update(ctx, new).await,
 
         poise::Event::InteractionCreate {
             interaction: Interaction::MessageComponent(interaction),

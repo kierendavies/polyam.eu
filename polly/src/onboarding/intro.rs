@@ -317,3 +317,23 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
 
     Ok(())
 }
+
+pub async fn update_avatar(ctx: &impl Context, member: &Member) -> Result<()> {
+    let Some((channel_id, message_id)) =
+        persist::intro_message::get(ctx.db(), member.guild_id, member.user.id).await?
+    else {
+        return Ok(());
+    };
+
+    let message = channel_id.message(ctx.serenity(), message_id).await?;
+    let intro = Intro::from_message_embeds(message)?;
+
+    channel_id
+        .edit_message(ctx.serenity(), message_id, |message| {
+            *message = edit_message(&member.user, &intro);
+            message
+        })
+        .await?;
+
+    Ok(())
+}
