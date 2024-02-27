@@ -1,6 +1,6 @@
 use std::{convert::identity, time::Duration};
 
-use poise::serenity_prelude::{ChannelId, Message};
+use serenity::all::{ChannelId, GetMessages, Message};
 
 use crate::{context::Context, error::Result};
 
@@ -41,7 +41,7 @@ pub async fn auto_delete(ctx: &impl Context) -> Result<()> {
             // Repeatedly get the oldest messages that have not been deleted.
             let mut batch = cfg
                 .channel
-                .messages(ctx.serenity(), |b| b.after(0).limit(100))
+                .messages(ctx.serenity(), GetMessages::new().after(0).limit(100))
                 .await?;
 
             batch.sort_by_key(|msg| msg.timestamp);

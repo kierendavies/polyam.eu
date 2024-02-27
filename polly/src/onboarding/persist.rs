@@ -4,17 +4,17 @@ macro_rules! message_cache_impl {
         #[::tracing::instrument(skip(db))]
         pub async fn set<'db, DB: ::sqlx::PgExecutor<'db>>(
             db: DB,
-            guild_id: ::poise::serenity_prelude::GuildId,
-            user_id: ::poise::serenity_prelude::UserId,
-            channel_id: ::poise::serenity_prelude::ChannelId,
-            message_id: ::poise::serenity_prelude::MessageId,
+            guild_id: ::serenity::all::GuildId,
+            user_id: ::serenity::all::UserId,
+            channel_id: ::serenity::all::ChannelId,
+            message_id: ::serenity::all::MessageId,
         ) -> $crate::error::Result<()> {
             ::sqlx::query!(
                 $query,
-                guild_id.0 as i64,
-                user_id.0 as i64,
-                channel_id.0 as i64,
-                message_id.0 as i64,
+                guild_id.get() as i64,
+                user_id.get() as i64,
+                channel_id.get() as i64,
+                message_id.get() as i64,
             )
             .execute(db)
             .await?;
@@ -28,19 +28,19 @@ macro_rules! message_cache_impl {
         #[::tracing::instrument(skip(db))]
         pub async fn get<'db, DB: ::sqlx::PgExecutor<'db>>(
             db: DB,
-            guild_id: ::poise::serenity_prelude::GuildId,
-            user_id: ::poise::serenity_prelude::UserId,
+            guild_id: ::serenity::all::GuildId,
+            user_id: ::serenity::all::UserId,
         ) -> $crate::error::Result<
             Option<(
-                ::poise::serenity_prelude::ChannelId,
-                ::poise::serenity_prelude::MessageId,
+                ::serenity::all::ChannelId,
+                ::serenity::all::MessageId,
             )>,
         > {
-            let row = ::sqlx::query!($query, guild_id.0 as i64, user_id.0 as i64)
+            let row = ::sqlx::query!($query, guild_id.get() as i64, user_id.get() as i64)
                 .map(|record| {
                     (
-                        ::poise::serenity_prelude::ChannelId(record.channel_id as u64),
-                        ::poise::serenity_prelude::MessageId(record.message_id as u64),
+                        ::serenity::all::ChannelId::new(record.channel_id as u64),
+                        ::serenity::all::MessageId::new(record.message_id as u64),
                     )
                 })
                 .fetch_optional(db)
@@ -55,20 +55,20 @@ macro_rules! message_cache_impl {
         #[::tracing::instrument(skip(db))]
         pub async fn get_all<'db, DB: ::sqlx::PgExecutor<'db>>(
             db: DB,
-            guild_id: ::poise::serenity_prelude::GuildId,
+            guild_id: ::serenity::all::GuildId,
         ) -> $crate::error::Result<
             Vec<(
-                ::poise::serenity_prelude::UserId,
-                ::poise::serenity_prelude::ChannelId,
-                ::poise::serenity_prelude::MessageId,
+                ::serenity::all::UserId,
+                ::serenity::all::ChannelId,
+                ::serenity::all::MessageId,
             )>,
         > {
-            let rows = ::sqlx::query!($query, guild_id.0 as i64)
+            let rows = ::sqlx::query!($query, guild_id.get() as i64)
             .map(|record| {
                 (
-                    ::poise::serenity_prelude::UserId(record.user_id as u64),
-                    ::poise::serenity_prelude::ChannelId(record.channel_id as u64),
-                    ::poise::serenity_prelude::MessageId(record.message_id as u64),
+                    ::serenity::all::UserId::new(record.user_id as u64),
+                    ::serenity::all::ChannelId::new(record.channel_id as u64),
+                    ::serenity::all::MessageId::new(record.message_id as u64),
                 )
             })
             .fetch_all(db)
@@ -83,10 +83,10 @@ macro_rules! message_cache_impl {
         #[::tracing::instrument(skip(db))]
         pub async fn delete<'db, DB: ::sqlx::PgExecutor<'db>>(
             db: DB,
-            guild_id: ::poise::serenity_prelude::GuildId,
-            user_id: ::poise::serenity_prelude::UserId,
+            guild_id: ::serenity::all::GuildId,
+            user_id: ::serenity::all::UserId,
         ) -> $crate::error::Result<()> {
-            let query_result = ::sqlx::query!($query, guild_id.0 as i64, user_id.0 as i64)
+            let query_result = ::sqlx::query!($query, guild_id.get() as i64, user_id.get() as i64)
                 .execute(db)
                 .await?;
 

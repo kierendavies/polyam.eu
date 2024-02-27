@@ -1,21 +1,22 @@
 use anyhow::Context as _;
-use poise::serenity_prelude::{
+use serenity::all::{
     ActionRowComponent,
-    GuildId,
-    InputTextStyle,
-    InteractionResponseType,
-    Member,
-    Message,
-    ModalSubmitInteraction,
-    User,
-    UserId,
-};
-use serenity::builder::{
+    CreateActionRow,
     CreateButton,
     CreateEmbed,
+    CreateInputText,
     CreateInteractionResponse,
+    CreateInteractionResponseMessage,
     CreateMessage,
+    CreateModal,
     EditMessage,
+    GuildId,
+    InputTextStyle,
+    Member,
+    Message,
+    ModalInteraction,
+    User,
+    UserId,
 };
 use tracing::warn;
 
@@ -58,15 +59,16 @@ impl Intro {
         })
     }
 
-    fn from_modal_submit_interaction(msi: &ModalSubmitInteraction) -> Result<Self> {
+    fn from_modal_interaction(interaction: &ModalInteraction) -> Result<Self> {
         Self::from_fields(
-            msi.data
+            interaction
+                .data
                 .components
                 .iter()
                 .flat_map(|row| row.components.iter())
                 .filter_map(|component| match component {
                     ActionRowComponent::InputText(input_text) => {
-                        Some((input_text.custom_id.as_str(), input_text.value.as_str()))
+                        Some((input_text.custom_id.as_str(), input_text.value.as_ref()?))
                     }
                     _ => None,
                 }),
@@ -93,14 +95,9 @@ impl Intro {
 }
 
 pub fn create_button() -> CreateButton {
-    let mut button = CreateButton::default();
-
-    button
-        .custom_id(MODAL_ID)
+    CreateButton::new(MODAL_ID)
         .label(LABEL_INTRODUCE_YOURSELF)
-        .emoji('👋');
-
-    button
+        .emoji('👋')
 }
 
 pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Result<Option<Intro>> {
@@ -131,64 +128,42 @@ pub async fn get(ctx: &impl Context, guild_id: GuildId, user_id: UserId) -> Resu
     Ok(intro)
 }
 
-fn create_modal<'a>(existing_intro: Option<&Intro>) -> CreateInteractionResponse<'a> {
-    let mut response = CreateInteractionResponse::default();
+fn create_modal(existing_intro: Option<&Intro>) -> CreateModal {
+    let mut about_me = CreateInputText::new(InputTextStyle::Paragraph, LABEL_ABOUT_ME, ID_ABOUT_ME)
+        .placeholder("I like long walks on the beach... 🏖")
+        .required(true)
+        .min_length(50)
+        .max_length(1000);
+    if let Some(intro) = existing_intro {
+        about_me = about_me.value(&intro.about_me);
+    }
 
-    response
-        .kind(InteractionResponseType::Modal)
-        .interaction_response_data(|data| {
-            data.custom_id(MODAL_ID)
-                .title(LABEL_INTRODUCE_YOURSELF)
-                .components(|components| {
-                    components
-                        .create_action_row(|row| {
-                            row.create_input_text(|text| {
-                                text.custom_id(ID_ABOUT_ME)
-                                    .label(LABEL_ABOUT_ME)
-                                    .style(InputTextStyle::Paragraph)
-                                    .placeholder("I like long walks on the beach... 🏖")
-                                    .required(true)
-                                    .min_length(50)
-                                    .max_length(1000);
-                                if let Some(intro) = existing_intro {
-                                    text.value(&intro.about_me);
-                                }
-                                text
-                            })
-                        })
-                        .create_action_row(|row| {
-                            row.create_input_text(|text| {
-                                text.custom_id(ID_POLYAMORY_EXPERIENCE)
-                                    .label(LABEL_POLYAMORY_EXPERIENCE)
-                                    .style(InputTextStyle::Paragraph)
-                                    .placeholder("It's okay if you have none 💕")
-                                    .required(true)
-                                    .max_length(1000);
-                                if let Some(intro) = existing_intro {
-                                    text.value(&intro.polyamory_experience);
-                                }
-                                text
-                            })
-                        })
-                })
-        });
+    let mut polyamory_experience = CreateInputText::new(
+        InputTextStyle::Paragraph,
+        LABEL_POLYAMORY_EXPERIENCE,
+        ID_POLYAMORY_EXPERIENCE,
+    )
+    .placeholder("It's okay if you have none 💕")
+    .required(true)
+    .max_length(1000);
+    if let Some(intro) = existing_intro {
+        polyamory_experience = polyamory_experience.value(&intro.polyamory_experience);
+    }
 
-    response
+    CreateModal::new(MODAL_ID, LABEL_INTRODUCE_YOURSELF).components(vec![
+        CreateActionRow::InputText(about_me),
+        CreateActionRow::InputText(polyamory_experience),
+    ])
 }
 
-pub async fn create_modal_for_member<'a>(
-    ctx: &impl Context,
-    member: &Member,
-) -> Result<CreateInteractionResponse<'a>> {
+pub async fn create_modal_for_member(ctx: &impl Context, member: &Member) -> Result<CreateModal> {
     let existing_intro = get(ctx, member.guild_id, member.user.id).await?;
 
     Ok(create_modal(existing_intro.as_ref()))
 }
 
 fn create_embed(user: &User, intro: &Intro) -> CreateEmbed {
-    let mut embed = CreateEmbed::default();
-
-    embed
+    let mut embed = CreateEmbed::new()
         .description(format!("{user}"))
         .field(LABEL_ABOUT_ME, &intro.about_me, false)
         .field(
@@ -198,34 +173,20 @@ fn create_embed(user: &User, intro: &Intro) -> CreateEmbed {
         );
 
     if let Some(avatar_url) = user.static_avatar_url() {
-        embed.thumbnail(avatar_url);
+        embed = embed.thumbnail(avatar_url);
     }
 
     embed
 }
 
-fn create_message<'a>(user: &User, intro: &Intro) -> CreateMessage<'a> {
-    let mut message = CreateMessage::default();
-
-    message
+fn create_message(user: &User, intro: &Intro) -> CreateMessage {
+    CreateMessage::new()
         .content(format!("Introduction: {user}"))
-        .embed(|embed| {
-            *embed = create_embed(user, intro);
-            embed
-        });
-
-    message
+        .embed(create_embed(user, intro))
 }
 
-fn edit_message<'a>(user: &User, intro: &Intro) -> EditMessage<'a> {
-    let mut message = EditMessage::default();
-
-    message.embed(|embed| {
-        *embed = create_embed(user, intro);
-        embed
-    });
-
-    message
+fn edit_message(user: &User, intro: &Intro) -> EditMessage {
+    EditMessage::new().embed(create_embed(user, intro))
 }
 
 #[tracing::instrument(skip_all)]
@@ -238,18 +199,16 @@ async fn publish(ctx: &impl Context, member: &Member, intro: &Intro) -> Result<M
         persist::intro_message::get(&mut *tx, member.guild_id, member.user.id).await?
     {
         channel_id
-            .edit_message(ctx.serenity(), message_id, |message| {
-                *message = edit_message(&member.user, intro);
-                message
-            })
+            .edit_message(
+                ctx.serenity(),
+                message_id,
+                edit_message(&member.user, intro),
+            )
             .await?
     } else {
         let message = config
             .intros_channel
-            .send_message(ctx.serenity(), |message| {
-                *message = create_message(&member.user, intro);
-                message
-            })
+            .send_message(ctx.serenity(), create_message(&member.user, intro))
             .await?;
 
         persist::intro_message::set(
@@ -270,13 +229,13 @@ async fn publish(ctx: &impl Context, member: &Member, intro: &Intro) -> Result<M
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) -> Result<()> {
+pub async fn submit(ctx: &impl Context, interaction: &ModalInteraction) -> Result<()> {
     let mut member = interaction
         .member
         .clone()
         .context("Interaction has no member")?;
     let config = ctx.config().guild(member.guild_id)?;
-    let intro = Intro::from_modal_submit_interaction(interaction)?;
+    let intro = Intro::from_modal_interaction(interaction)?;
 
     // TODO: When Shuttle has updated to Rust 1.70, switch this to is_some_and
     let is_from_quarantine = match &interaction.message {
@@ -287,31 +246,30 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalSubmitInteraction) ->
     if is_from_quarantine {
         let ack_content = "Thanks for submitting your introduction. In the next few seconds, you'll get access to the rest of the server.";
         interaction
-            .create_interaction_response(ctx.serenity(), |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|data| data.content(ack_content).ephemeral(true))
-            })
+            .create_response(
+                ctx.serenity(),
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(ack_content)
+                        .ephemeral(true),
+                ),
+            )
             .await?;
 
         publish(ctx, &member, &intro).await?;
         unquarantine(ctx, &mut member).await?;
-
-        interaction
-            .delete_original_interaction_response(ctx.serenity())
-            .await?;
     } else {
         let message = publish(ctx, &member, &intro).await?;
         let message_url = message.link_ensured(ctx.serenity()).await;
 
         interaction
-            .create_interaction_response(ctx.serenity(), |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|data| {
-                        data.content(format!("Introduction updated {message_url}"))
-                    })
-            })
+            .create_response(
+                ctx.serenity(),
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(format!("Introduction updated {message_url}")),
+                ),
+            )
             .await?;
     }
 
@@ -329,10 +287,11 @@ pub async fn update_avatar(ctx: &impl Context, member: &Member) -> Result<()> {
     let intro = Intro::from_message_embeds(message)?;
 
     channel_id
-        .edit_message(ctx.serenity(), message_id, |message| {
-            *message = edit_message(&member.user, &intro);
-            message
-        })
+        .edit_message(
+            ctx.serenity(),
+            message_id,
+            edit_message(&member.user, &intro),
+        )
         .await?;
 
     Ok(())

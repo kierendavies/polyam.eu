@@ -13,12 +13,10 @@ mod task;
 use std::{fs, sync::Arc, time::Duration};
 
 use anyhow::Context as _;
-use poise::{
-    futures_util::join,
-    serenity_prelude::{GatewayIntents, Ready},
-};
-use shuttle_poise::ShuttlePoise;
+use futures::join;
+use serenity::all::{FullEvent, GatewayIntents, Ready};
 use shuttle_secrets::SecretStore;
+use shuttle_serenity::SerenityService;
 use sqlx::PgPool;
 
 use crate::{
@@ -26,7 +24,7 @@ use crate::{
     commands::bubblewrap::bubblewrap,
     config::Config,
     error::Error,
-    error_reporting::report_error,
+    error_reporting::{report_error, report_event_handler_error},
 };
 
 pub struct DataInner {
@@ -129,9 +127,8 @@ async fn on_error(err: PoiseFrameworkError<'_>) {
 #[tracing::instrument(skip_all)]
 async fn handle_event(
     serenity_context: &serenity::client::Context,
-    event: &poise::Event<'_>,
+    event: &FullEvent,
     framework_context: PoiseFrameworkContext<'_>,
-    _user_data: &Data,
 ) -> crate::error::Result<()> {
     let ctx = context::Event {
         serenity: serenity_context,
@@ -143,13 +140,7 @@ async fn handle_event(
             join!(
                 $(async {
                     if let Err(error) = $fn(&ctx, event).await {
-                        let framework_error = poise::FrameworkError::EventHandler {
-                            error,
-                            ctx: serenity_context,
-                            event,
-                            framework: framework_context,
-                        };
-                        on_error(framework_error).await;
+                        _ = report_event_handler_error(error, &serenity_context, event, framework_context).await;
                     }
                 })+
             )
@@ -161,43 +152,41 @@ async fn handle_event(
     Ok(())
 }
 
-async fn framework(
+async fn serenity_client(
     token: String,
     config: Config,
     db: PgPool,
-) -> Result<Arc<PoiseFramework>, serenity::Error> {
-    poise::Framework::builder()
-        .token(token)
-        .intents(
-            GatewayIntents::non_privileged()
-                | GatewayIntents::GUILD_MEMBERS
-                | GatewayIntents::MESSAGE_CONTENT,
-        )
+) -> Result<serenity::Client, serenity::Error> {
+    let intents = GatewayIntents::non_privileged()
+        | GatewayIntents::GUILD_MEMBERS
+        | GatewayIntents::MESSAGE_CONTENT;
+
+    let framework = poise::Framework::builder()
         .setup(|serenity_context, ready, framework| {
             Box::pin(setup(serenity_context, ready, framework, config, db))
         })
         .options(poise::FrameworkOptions {
             commands: commands(),
             on_error: |error| Box::pin(on_error(error)),
-            event_handler: |serenity_context, event, framework_context, user_data| {
-                Box::pin(handle_event(
-                    serenity_context,
-                    event,
-                    framework_context,
-                    user_data,
-                ))
+            event_handler: |serenity_context, event, framework_context, _| {
+                Box::pin(handle_event(serenity_context, event, framework_context))
             },
             ..Default::default()
         })
-        .build()
-        .await
+        .build();
+
+    let client = serenity::Client::builder(token, intents)
+        .framework(framework)
+        .await?;
+
+    Ok(client)
 }
 
 #[shuttle_runtime::main]
 async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_shared_db::Postgres] db: PgPool,
-) -> ShuttlePoise<Data, Error> {
+) -> Result<SerenityService, shuttle_runtime::Error> {
     let token = secret_store
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;
@@ -210,22 +199,22 @@ async fn shuttle_main(
         .await
         .context("Migrating database")?;
 
-    let framework = framework(token, config, db)
+    let client = serenity_client(token, config, db)
         .await
         .context("Creating framework")?;
 
     // https://killavus.github.io/posts/thread-pool-graceful-shutdown/
     tokio::spawn({
-        let shard_manager = framework.shard_manager().clone();
+        let shard_manager = Arc::clone(&client.shard_manager);
 
         async move {
             tokio::signal::ctrl_c()
                 .await
                 .expect("Failed to register Ctrl-C handler");
 
-            shard_manager.lock().await.shutdown_all().await;
+            shard_manager.shutdown_all().await;
         }
     });
 
-    Ok(framework.into())
+    Ok(client.into())
 }

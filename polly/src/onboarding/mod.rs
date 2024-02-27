@@ -5,25 +5,25 @@ mod quarantine;
 use std::{collections::HashSet, future};
 
 use anyhow::Context as _;
-use poise::{
-    serenity_prelude::{
-        GuildId,
-        Interaction,
-        Member,
-        Message,
-        MessageComponentInteraction,
-        ModalSubmitInteraction,
-        User,
-    },
-    ApplicationCommandOrAutocompleteInteraction,
+use futures::TryStreamExt;
+use poise::CommandInteractionType;
+use serenity::all::{
+    ComponentInteraction,
+    CreateInteractionResponse,
+    FullEvent,
+    GuildId,
+    Interaction,
+    Member,
+    Message,
+    ModalInteraction,
+    User,
 };
-use serenity::futures::TryStreamExt;
 
 use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
     config::GuildConfig,
     context::Context,
-    error::{bail, Error, Result},
+    error::{Error, Result},
     PoiseApplicationContext,
 };
 
@@ -70,7 +70,9 @@ async fn guild_member_removal(ctx: &impl Context, guild_id: &GuildId, user: &Use
     Ok(())
 }
 
-async fn guild_member_update(ctx: &impl Context, member: &Member) -> Result<()> {
+async fn guild_member_update(ctx: &impl Context, new: Option<&Member>) -> Result<()> {
+    let member = new.context("Member update has no new member")?;
+
     if member.user.bot {
         return Ok(());
     }
@@ -90,9 +92,9 @@ async fn guild_member_update(ctx: &impl Context, member: &Member) -> Result<()> 
     ),
     skip_all,
 )]
-pub async fn message_component_interaction(
+pub async fn component_interaction(
     ctx: &impl Context,
-    interaction: &MessageComponentInteraction,
+    interaction: &ComponentInteraction,
 ) -> Result<()> {
     match interaction.data.custom_id.as_str() {
         intro::MODAL_ID => {
@@ -103,10 +105,7 @@ pub async fn message_component_interaction(
             let modal = intro::create_modal_for_member(ctx, member).await?;
 
             interaction
-                .create_interaction_response(ctx.serenity(), |response| {
-                    *response = modal;
-                    response
-                })
+                .create_response(ctx.serenity(), CreateInteractionResponse::Modal(modal))
                 .await?;
 
             Ok(())
@@ -126,10 +125,7 @@ pub async fn message_component_interaction(
     ),
     skip_all,
 )]
-pub async fn modal_submit_interaction(
-    ctx: &impl Context,
-    interaction: &ModalSubmitInteraction,
-) -> Result<()> {
+pub async fn modal_interaction(ctx: &impl Context, interaction: &ModalInteraction) -> Result<()> {
     match interaction.data.custom_id.as_str() {
         intro::MODAL_ID => intro::submit(ctx, interaction).await,
 
@@ -138,30 +134,31 @@ pub async fn modal_submit_interaction(
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn handle_event(ctx: &impl Context, event: &poise::Event<'_>) -> Result<()> {
+pub async fn handle_event(ctx: &impl Context, event: &FullEvent) -> Result<()> {
     match event {
-        poise::Event::GuildMemberAddition { new_member } => {
+        FullEvent::GuildMemberAddition { new_member } => {
             guild_member_addition(ctx, new_member).await
         }
 
-        poise::Event::GuildMemberRemoval {
+        FullEvent::GuildMemberRemoval {
             guild_id,
             user,
             member_data_if_available: _,
         } => guild_member_removal(ctx, guild_id, user).await,
 
-        poise::Event::GuildMemberUpdate {
+        FullEvent::GuildMemberUpdate {
             old_if_available: _,
             new,
-        } => guild_member_update(ctx, new).await,
+            event: _,
+        } => guild_member_update(ctx, new.as_ref()).await,
 
-        poise::Event::InteractionCreate {
-            interaction: Interaction::MessageComponent(interaction),
-        } => message_component_interaction(ctx, interaction).await,
+        FullEvent::InteractionCreate {
+            interaction: Interaction::Component(interaction),
+        } => component_interaction(ctx, interaction).await,
 
-        poise::Event::InteractionCreate {
-            interaction: Interaction::ModalSubmit(interaction),
-        } => modal_submit_interaction(ctx, interaction).await,
+        FullEvent::InteractionCreate {
+            interaction: Interaction::Modal(interaction),
+        } => modal_interaction(ctx, interaction).await,
 
         _ => Ok(()),
     }
@@ -259,21 +256,18 @@ pub async fn onboarding_sync_db(ctx: PoiseApplicationContext<'_>) -> Result<()> 
     skip(ctx),
 )]
 pub async fn intro(ctx: PoiseApplicationContext<'_>) -> Result<()> {
-    let ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction) =
-        ctx.interaction
-    else {
-        bail!("Expected ApplicationCommandInteraction");
-    };
+    if ctx.interaction_type != CommandInteractionType::Command {
+        return Ok(());
+    }
 
     let member = ctx.author_member().await.context("Context has no member")?;
 
     let modal = intro::create_modal_for_member(&ctx, &member).await?;
-
-    interaction
-        .create_interaction_response(ctx.serenity_context, |response| {
-            *response = modal;
-            response
-        })
+    ctx.interaction
+        .create_response(
+            ctx.serenity_context,
+            CreateInteractionResponse::Modal(modal),
+        )
         .await?;
 
     Ok(())

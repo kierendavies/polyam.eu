@@ -1,6 +1,5 @@
 use anyhow::Context as _;
-use poise::serenity_prelude::{GuildId, Member, Message, UserId};
-use serenity::{builder::CreateMessage, model::Permissions};
+use serenity::all::{CreateActionRow, CreateMessage, GuildId, Member, Message, UserId};
 use tracing::info;
 
 use super::{intro, persist};
@@ -9,7 +8,7 @@ use crate::{
     error::{bail, is_http_not_found, Result},
 };
 
-fn create_welcome_message<'a>(guild_name: &str, member: &Member) -> CreateMessage<'a> {
+fn create_welcome_message(guild_name: &str, member: &Member) -> CreateMessage {
     let content = format!(
         "Welcome to {guild_name}, {member}! Please introduce yourself before you can start chatting.\n\
         \n\
@@ -20,18 +19,9 @@ fn create_welcome_message<'a>(guild_name: &str, member: &Member) -> CreateMessag
         4. Speak English in the common channels."
     );
 
-    let mut message = CreateMessage::default();
-
-    message.content(content).components(|components| {
-        components.create_action_row(|row| {
-            row.create_button(|button| {
-                *button = intro::create_button();
-                button
-            })
-        })
-    });
-
-    message
+    CreateMessage::new()
+        .content(content)
+        .components(vec![CreateActionRow::Buttons(vec![intro::create_button()])])
 }
 
 #[tracing::instrument(skip_all)]
@@ -49,8 +39,7 @@ pub async fn send_welcome_message(ctx: &impl Context, member: &Member) -> Result
 
     let guild = member.guild_id.to_partial_guild(ctx.serenity()).await?;
 
-    let perms = guild.user_permissions_in(&channel, member)?;
-    if !perms.contains(Permissions::VIEW_CHANNEL) {
+    if !guild.user_permissions_in(&channel, member).view_channel() {
         bail!(
             "Missing VIEW_CHANNEL permission: guild.id={}, guild.name={:?}, channel.id={}, channel.name={:?}, member.user.id={}, member.user.tag={:?}",
             guild.id,
@@ -63,10 +52,7 @@ pub async fn send_welcome_message(ctx: &impl Context, member: &Member) -> Result
     }
 
     let message = channel
-        .send_message(ctx.serenity(), |message| {
-            *message = create_welcome_message(&guild.name, member);
-            message
-        })
+        .send_message(ctx.serenity(), create_welcome_message(&guild.name, member))
         .await?;
 
     persist::welcome_message::set(

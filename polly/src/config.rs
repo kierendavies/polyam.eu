@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::anyhow;
-use poise::serenity_prelude::{ChannelId, GuildId, RoleId};
 use serde::{de, Deserialize as _};
 use serde_derive::Deserialize;
+use serenity::all::{ChannelId, GuildId, RoleId};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

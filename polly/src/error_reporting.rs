@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
-use poise::serenity_prelude::Message;
-use serenity::{constants::MESSAGE_CODE_LIMIT, prelude::Mentionable};
+use serenity::all::{FullEvent, Mentionable, Message, MESSAGE_CODE_LIMIT};
 
 use crate::{
     context::Context,
@@ -14,12 +13,8 @@ use crate::{
 
 async fn get_response(ctx: &PoiseContext<'_>) -> Result<Option<Message>> {
     let resp = match ctx {
-        poise::Context::Application(PoiseApplicationContext {
-            interaction:
-                poise::ApplicationCommandOrAutocompleteInteraction::ApplicationCommand(interaction),
-            ..
-        }) => interaction
-            .get_interaction_response(ctx.serenity_context())
+        poise::Context::Application(PoiseApplicationContext { interaction, .. }) => interaction
+            .get_response(ctx.serenity_context())
             .await
             .map(Some)
             .or_else(|err| {
@@ -30,7 +25,7 @@ async fn get_response(ctx: &PoiseContext<'_>) -> Result<Option<Message>> {
                 }
             })?,
 
-        _ => None,
+        poise::Context::Prefix(_) => None,
     };
 
     Ok(resp)
@@ -94,10 +89,10 @@ fn write_code_block_truncated(w: &mut impl Write, limit: usize, text: &str) -> R
     Ok(())
 }
 
-async fn report_event_handler_error(
+pub async fn report_event_handler_error(
     error: Error,
     serenity_context: &serenity::client::Context,
-    event: &poise::Event<'_>,
+    event: &FullEvent,
     framework_context: PoiseFrameworkContext<'_>,
 ) -> Result<()> {
     tracing::error!(?event, ?error, "Event handler error");
@@ -164,11 +159,12 @@ pub async fn report_error(err: PoiseFrameworkError<'_>) -> Result<()> {
             ctx,
             event,
             framework,
+            ..
         } => report_event_handler_error(error, ctx, event, framework).await,
 
-        poise::FrameworkError::Command { error, ctx } => report_command_error(error, ctx).await,
+        poise::FrameworkError::Command { error, ctx, .. } => report_command_error(error, ctx).await,
 
-        poise::FrameworkError::CommandPanic { payload, ctx } => {
+        poise::FrameworkError::CommandPanic { payload, ctx, .. } => {
             report_command_panic(payload, ctx).await
         }
 
