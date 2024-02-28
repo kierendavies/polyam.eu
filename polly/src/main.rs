@@ -18,6 +18,8 @@ use serenity::all::{FullEvent, GatewayIntents, Ready};
 use shuttle_secrets::SecretStore;
 use shuttle_serenity::SerenityService;
 use sqlx::PgPool;
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     auto_delete::auto_delete,
@@ -187,6 +189,18 @@ async fn shuttle_main(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
     #[shuttle_shared_db::Postgres] db: PgPool,
 ) -> Result<SerenityService, shuttle_runtime::Error> {
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing::metadata::LevelFilter::INFO.into())
+                .from_env_lossy()
+                .add_directive("polly=trace".parse().unwrap()),
+        )
+        .finish()
+        .with(ErrorLayer::default())
+        .init();
+
     let token = secret_store
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;
