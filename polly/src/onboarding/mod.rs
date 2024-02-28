@@ -40,13 +40,11 @@ async fn guild_member_addition(ctx: &impl Context, member: &Member) -> Result<()
         return Ok(());
     }
 
-    let mut member = member.clone();
-
     if intro::get(ctx, member.guild_id, member.user.id)
         .await?
         .is_none()
     {
-        quarantine(ctx, &mut member).await?;
+        quarantine(ctx, member).await?;
     }
 
     Ok(())
@@ -294,7 +292,7 @@ pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
             .members_iter(ctx.serenity())
             .err_into::<Error>()
             .try_filter(|member| future::ready(!member.user.bot))
-            .try_for_each(|mut member| async move {
+            .try_for_each(|member| async move {
                 let introduced = persist::intro_message::get(ctx.db(), guild_id, member.user.id)
                     .await?
                     .is_some();
@@ -307,7 +305,7 @@ pub async fn check_quarantine(ctx: &impl Context) -> Result<()> {
                         member.user.tag = member.user.tag(),
                         "Member has no intro and is not quarantined",
                     );
-                    quarantine(ctx, &mut member).await?;
+                    quarantine(ctx, &member).await?;
                 }
 
                 Ok(())

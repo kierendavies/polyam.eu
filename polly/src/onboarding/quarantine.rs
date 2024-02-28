@@ -5,7 +5,7 @@ use tracing::info;
 use super::{intro, persist};
 use crate::{
     context::Context,
-    error::{bail, is_http_not_found, Result},
+    error::{is_http_not_found, Result},
 };
 
 fn create_welcome_message(guild_name: &str, member: &Member) -> CreateMessage {
@@ -38,18 +38,6 @@ pub async fn send_welcome_message(ctx: &impl Context, member: &Member) -> Result
     assert!(channel.guild_id == member.guild_id);
 
     let guild = member.guild_id.to_partial_guild(ctx.serenity()).await?;
-
-    if !guild.user_permissions_in(&channel, member).view_channel() {
-        bail!(
-            "Missing VIEW_CHANNEL permission: guild.id={}, guild.name={:?}, channel.id={}, channel.name={:?}, member.user.id={}, member.user.tag={:?}",
-            guild.id,
-            guild.name,
-            channel.id,
-            channel.name,
-            member.user.id,
-            member.user.tag(),
-        );
-    }
 
     let message = channel
         .send_message(ctx.serenity(), create_welcome_message(&guild.name, member))
@@ -98,7 +86,7 @@ pub async fn delete_welcome_message(
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn quarantine(ctx: &impl Context, member: &mut Member) -> Result<()> {
+pub async fn quarantine(ctx: &impl Context, member: &Member) -> Result<()> {
     let config = ctx.config().guild(member.guild_id)?;
 
     member
