@@ -1702,6 +1702,8 @@ dependencies = [
  "once_cell",
  "poise",
  "rand",
+ "regex",
+ "reqwest",
  "serde",
  "serde_derive",
  "serenity",

@@ -44,6 +44,7 @@ macro_rules! error_from {
     };
 }
 
+error_from!(reqwest::Error);
 error_from!(serenity::Error);
 error_from!(sqlx::Error);
 error_from!(std::fmt::Error);

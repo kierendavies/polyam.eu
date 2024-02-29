@@ -5,6 +5,7 @@ mod auto_delete;
 mod commands;
 mod config;
 mod context;
+mod cracker;
 mod error;
 mod error_reporting;
 mod onboarding;
@@ -14,6 +15,7 @@ use std::{fs, sync::Arc, time::Duration};
 
 use anyhow::Context as _;
 use futures::join;
+use once_cell::sync::Lazy;
 use serenity::all::{FullEvent, GatewayIntents, Ready};
 use shuttle_secrets::SecretStore;
 use shuttle_serenity::SerenityService;
@@ -29,9 +31,12 @@ use crate::{
     error_reporting::{report_error, report_event_handler_error},
 };
 
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+
 pub struct DataInner {
     pub config: Config,
     pub db: PgPool,
+    pub tenor_api_key: String,
 }
 
 type Data = Arc<DataInner>;
@@ -58,6 +63,7 @@ async fn setup(
     framework: &PoiseFramework,
     config: Config,
     db: PgPool,
+    tenor_api_key: String,
 ) -> crate::error::Result<Data> {
     for guild in &ready.guilds {
         poise::builtins::register_in_guild(
@@ -68,7 +74,11 @@ async fn setup(
         .await?;
     }
 
-    let data = Arc::new(DataInner { config, db });
+    let data = Arc::new(DataInner {
+        config,
+        db,
+        tenor_api_key,
+    });
 
     macro_rules! spawn_periodic {
         ($task:path, $secs:expr) => {{
@@ -144,12 +154,12 @@ async fn handle_event(
                     if let Err(error) = $fn(&ctx, event).await {
                         _ = report_event_handler_error(error, &serenity_context, event, framework_context).await;
                     }
-                })+
+                }),+
             )
         };
     }
 
-    forward_to!(onboarding::handle_event);
+    forward_to!(cracker::handle_event, onboarding::handle_event);
 
     Ok(())
 }
@@ -158,6 +168,7 @@ async fn serenity_client(
     token: String,
     config: Config,
     db: PgPool,
+    tenor_api_key: String,
 ) -> Result<serenity::Client, serenity::Error> {
     let intents = GatewayIntents::non_privileged()
         | GatewayIntents::GUILD_MEMBERS
@@ -165,7 +176,14 @@ async fn serenity_client(
 
     let framework = poise::Framework::builder()
         .setup(|serenity_context, ready, framework| {
-            Box::pin(setup(serenity_context, ready, framework, config, db))
+            Box::pin(setup(
+                serenity_context,
+                ready,
+                framework,
+                config,
+                db,
+                tenor_api_key,
+            ))
         })
         .options(poise::FrameworkOptions {
             commands: commands(),
@@ -205,6 +223,10 @@ async fn shuttle_main(
         .get("DISCORD_TOKEN")
         .context("Getting DISCORD_TOKEN")?;
 
+    let tenor_api_key = secret_store
+        .get("TENOR_API_KEY")
+        .context("Getting TENOR_API_KEY")?;
+
     let config: Config =
         toml::from_str(&fs::read_to_string("polly.toml")?).context("Parsing config")?;
 
@@ -213,7 +235,7 @@ async fn shuttle_main(
         .await
         .context("Migrating database")?;
 
-    let client = serenity_client(token, config, db)
+    let client = serenity_client(token, config, db, tenor_api_key)
         .await
         .context("Creating framework")?;
 
