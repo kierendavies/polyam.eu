@@ -17,7 +17,7 @@ use anyhow::Context as _;
 use futures::join;
 use once_cell::sync::Lazy;
 use serenity::all::{FullEvent, GatewayIntents, Ready};
-use shuttle_secrets::SecretStore;
+use shuttle_runtime::SecretStore;
 use shuttle_serenity::SerenityService;
 use sqlx::PgPool;
 use tracing_error::ErrorLayer;
@@ -204,7 +204,7 @@ async fn serenity_client(
 
 #[shuttle_runtime::main]
 async fn shuttle_main(
-    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_runtime::Secrets] secret_store: SecretStore,
     #[shuttle_shared_db::Postgres] db: PgPool,
 ) -> Result<SerenityService, shuttle_runtime::Error> {
     tracing_subscriber::fmt()
