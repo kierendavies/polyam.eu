@@ -228,7 +228,8 @@ async fn shuttle_main(
         .context("Getting TENOR_API_KEY")?;
 
     let config: Config =
-        toml::from_str(&fs::read_to_string("polly.toml")?).context("Parsing config")?;
+        toml::from_str(&fs::read_to_string("polly.toml").context("Reading polly.toml")?)
+            .context("Parsing config")?;
 
     sqlx::migrate!()
         .run(&db)
