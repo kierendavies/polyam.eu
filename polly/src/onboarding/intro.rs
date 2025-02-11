@@ -260,7 +260,7 @@ pub async fn submit(ctx: &impl Context, interaction: &ModalInteraction) -> Resul
         unquarantine(ctx, &mut member).await?;
     } else {
         let message = publish(ctx, &member, &intro).await?;
-        let message_url = message.link_ensured(ctx.serenity()).await;
+        let message_url = message.id.link(message.channel_id, Some(member.guild_id));
 
         interaction
             .create_response(

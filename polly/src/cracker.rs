@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use once_cell::sync::Lazy;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use regex::Regex;
 use serde::Deserialize;
 use serenity::all::FullEvent;
@@ -51,7 +51,7 @@ pub async fn handle_event(ctx: &impl Context, event: &FullEvent) -> Result<()> {
 
     let tenor_gif_url = tenor_search_results
         .results
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rand::rng())
         .context("No Tenor search results")?
         .url
         .as_str();

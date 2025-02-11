@@ -46,7 +46,7 @@ async fn write_command_info(
     write!(w, " {}", ctx.channel_id().mention())?;
 
     if let Some(resp) = get_response(ctx).await? {
-        write!(w, " {}", resp.link_ensured(ctx).await)?;
+        write!(w, " {}", resp.link())?;
     }
 
     writeln!(w)?;

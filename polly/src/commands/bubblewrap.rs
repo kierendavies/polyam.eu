@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use rand::{distributions::WeightedIndex, prelude::Distribution};
+use rand::{distr::weighted::WeightedIndex, prelude::Distribution};
 
 use crate::{error::Result, PoiseApplicationContext};
 
@@ -16,7 +16,7 @@ const SIZE: u32 = 5;
 pub async fn bubblewrap(ctx: PoiseApplicationContext<'_>) -> Result<()> {
     let mut text = String::new();
     {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..SIZE {
             for _ in 0..SIZE {
                 let bubble = BUBBLES[DISTRIBUTION.sample(&mut rng)].0;

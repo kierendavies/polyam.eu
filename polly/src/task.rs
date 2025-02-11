@@ -27,8 +27,9 @@ where
 {
     const MAX_DELAY: Duration = Duration::from_secs(60);
 
-    let init_delay = rand::distributions::Uniform::new(Duration::ZERO, period.min(MAX_DELAY))
-        .sample(&mut rand::thread_rng());
+    let init_delay = rand::distr::Uniform::new(Duration::ZERO, period.min(MAX_DELAY))
+        .unwrap()
+        .sample(&mut rand::rng());
 
     let mut timer = tokio::time::interval_at(Instant::now() + init_delay, period);
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
