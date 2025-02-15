@@ -2,7 +2,10 @@ mod intro;
 mod persist;
 mod quarantine;
 
-use std::{collections::HashSet, future};
+use std::{
+    collections::{HashMap, HashSet},
+    future,
+};
 
 use anyhow::Context as _;
 use futures::TryStreamExt;
@@ -203,36 +206,48 @@ pub async fn onboarding_sync_db(ctx: PoiseApplicationContext<'_>) -> Result<()> 
 
     let mut tx = ctx.data().db.begin().await?;
 
-    let persisted_intros = persist::intro_message::get_all(&mut *tx, guild_id).await?;
-    let persisted_intro_message_ids: HashSet<_> = persisted_intros
-        .iter()
-        .map(|(_, _, message_id)| *message_id)
-        .collect();
+    let mut persisted_intros = persist::intro_message::get_all(&mut *tx, guild_id)
+        .await?
+        .into_iter()
+        .map(|(user_id, channel_id, message_id)| (user_id, (channel_id, message_id)))
+        .collect::<HashMap<_, _>>();
 
-    for message in &found_intros {
-        if !persisted_intro_message_ids.contains(&message.id) {
-            let user_id = message
-                .mentions
-                .first()
-                .context("Message has no mentions")?
-                .id;
-            persist::intro_message::set(
-                &mut *tx,
-                guild_id,
-                user_id,
-                message.channel_id,
-                message.id,
-            )
-            .await?;
-            n_added += 1;
-        }
+    let delete_persisted_intros = persisted_intros
+        .extract_if(|_, (_, message_id)| !found_intro_message_ids.contains(message_id));
+    for (user_id, _) in delete_persisted_intros {
+        persist::intro_message::delete(&mut *tx, guild_id, user_id).await?;
+        n_deleted += 1;
     }
 
-    for (user_id, _, message_id) in &persisted_intros {
-        if !found_intro_message_ids.contains(message_id) {
-            persist::intro_message::delete(&mut *tx, guild_id, *user_id).await?;
-            n_deleted += 1;
+    for message in &found_intros {
+        let Some(user) = message.mentions.first() else {
+            ctx.say(format!(
+                "Intro message has no mentions: {}",
+                message.id.link(message.channel_id, Some(guild_id)),
+            ))
+            .await?;
+
+            continue;
+        };
+
+        if let Some(&(persisted_channel_id, persisted_message_id)) = persisted_intros.get(&user.id)
+        {
+            if persisted_message_id != message.id {
+                ctx.say(format!(
+                    "Duplicate intro messages: {} {}",
+                    persisted_message_id.link(persisted_channel_id, Some(guild_id)),
+                    message.id.link(message.channel_id, Some(guild_id)),
+                ))
+                .await?;
+            }
+
+            continue;
         }
+
+        persist::intro_message::set(&mut *tx, guild_id, user.id, message.channel_id, message.id)
+            .await?;
+        persisted_intros.insert(user.id, (message.channel_id, message.id));
+        n_added += 1;
     }
 
     tx.commit().await?;

@@ -1,3 +1,4 @@
+#![feature(hash_extract_if)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
