@@ -1,0 +1,25 @@
+name: Shuttle deploy
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "polly/**"
+  schedule:
+     - cron: "41 8 * * 2"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shuttle-hq/deploy-action@v2
+        with:
+          shuttle-api-key: ${{ secrets.SHUTTLE_API_KEY }}
+          project-id: proj_01JKT8XK1HGB75NVWQ783VX80N
+          working-directory: polly
+          cargo-shuttle-version: "0.57"
+          secrets: |
+            DISCORD_TOKEN = "${{ secrets.DISCORD_TOKEN }}"
+            TENOR_API_KEY = "${{ secrets.TENOR_API_KEY }}"
