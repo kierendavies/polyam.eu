@@ -1,14 +1,14 @@
 use std::fmt::Write;
 
-use serenity::all::{FullEvent, Mentionable, Message, MESSAGE_CODE_LIMIT};
+use serenity::all::{FullEvent, MESSAGE_CODE_LIMIT, Mentionable, Message};
 
 use crate::{
-    context::Context,
-    error::{bail, is_http_not_found, Error, Result},
     PoiseApplicationContext,
     PoiseContext,
     PoiseFrameworkContext,
     PoiseFrameworkError,
+    context::Context,
+    error::{Error, Result, bail, is_http_not_found},
 };
 
 async fn get_response(ctx: &PoiseContext<'_>) -> Result<Option<Message>> {

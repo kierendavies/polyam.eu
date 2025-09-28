@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 
-use crate::{config::Config, Data, PoiseApplicationContext, PoiseContext, PoiseFrameworkContext};
+use crate::{Data, PoiseApplicationContext, PoiseContext, PoiseFrameworkContext, config::Config};
 
 pub trait Context {
     fn serenity(&self) -> &serenity::client::Context;

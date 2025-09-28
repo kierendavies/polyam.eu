@@ -1,12 +1,14 @@
-use once_cell::sync::Lazy;
+use core::fmt::Write as _;
+use std::sync::LazyLock;
+
 use rand::{distr::weighted::WeightedIndex, prelude::Distribution};
 
-use crate::{error::Result, PoiseApplicationContext};
+use crate::{PoiseApplicationContext, error::Result};
 
 const BUBBLES: [(&str, u32); 3] = [("🔵", 240), ("💥", 10), ("🐱", 1)];
 
-static DISTRIBUTION: Lazy<WeightedIndex<u32>> =
-    Lazy::new(|| WeightedIndex::new(BUBBLES.map(|b| b.1)).unwrap());
+static DISTRIBUTION: LazyLock<WeightedIndex<u32>> =
+    LazyLock::new(|| WeightedIndex::new(BUBBLES.map(|b| b.1)).unwrap());
 
 const SIZE: u32 = 5;
 
@@ -20,7 +22,7 @@ pub async fn bubblewrap(ctx: PoiseApplicationContext<'_>) -> Result<()> {
         for _ in 0..SIZE {
             for _ in 0..SIZE {
                 let bubble = BUBBLES[DISTRIBUTION.sample(&mut rng)].0;
-                text.push_str(&format!("||{bubble}||"));
+                write!(&mut text, "||{bubble}||").expect("write to String failed");
             }
             text.push('\n');
         }

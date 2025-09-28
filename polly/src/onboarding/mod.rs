@@ -24,10 +24,10 @@ use serenity::all::{
 
 use self::quarantine::{delete_welcome_message, quarantine};
 use crate::{
+    PoiseApplicationContext,
     config::GuildConfig,
     context::Context,
     error::{Error, Result},
-    PoiseApplicationContext,
 };
 
 #[tracing::instrument(

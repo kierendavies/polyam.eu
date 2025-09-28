@@ -1,13 +1,14 @@
+use std::sync::LazyLock;
+
 use anyhow::Context as _;
-use once_cell::sync::Lazy;
 use rand::seq::IndexedRandom;
 use regex::Regex;
 use serde::Deserialize;
 use serenity::all::FullEvent;
 
-use crate::{context::Context, error::Result, HTTP_CLIENT};
+use crate::{HTTP_CLIENT, context::Context, error::Result};
 
-static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(want a|wanna) cracker\b").unwrap());
+static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(want a|wanna) cracker\b").unwrap());
 
 #[derive(Debug, Deserialize)]
 struct TenorSearchResults {

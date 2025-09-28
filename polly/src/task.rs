@@ -12,10 +12,10 @@ where
     F: Fn(&'ctx Ctx) -> Fut,
 {
     tracing::info!(task_name, "Running task");
-    if let Err(err) = f(ctx).await {
-        if let Err(handling_err) = report_background_task_error(task_name, ctx, err).await {
-            tracing::error!(error = ?handling_err, "Error while handling error");
-        }
+    if let Err(err) = f(ctx).await
+        && let Err(handling_err) = report_background_task_error(task_name, ctx, err).await
+    {
+        tracing::error!(error = ?handling_err, "Error while handling error");
     }
 }
 

@@ -5,7 +5,7 @@ use tracing::info;
 use super::{intro, persist};
 use crate::{
     context::Context,
-    error::{is_http_not_found, Result},
+    error::{Result, is_http_not_found},
 };
 
 fn create_welcome_message(guild_name: &str, member: &Member) -> CreateMessage {

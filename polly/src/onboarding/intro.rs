@@ -23,7 +23,7 @@ use tracing::warn;
 use super::{persist, quarantine::unquarantine};
 use crate::{
     context::Context,
-    error::{is_http_not_found, Result},
+    error::{Result, is_http_not_found},
 };
 
 pub const MODAL_ID: &str = "onboarding_intro";

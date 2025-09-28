@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::anyhow;
-use serde::{de, Deserialize as _};
+use serde::{Deserialize as _, de};
 use serde_derive::Deserialize;
 use serenity::all::{ChannelId, GuildId, RoleId};
 

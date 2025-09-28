@@ -1,7 +1,3 @@
-#![feature(hash_extract_if)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-
 mod auto_delete;
 mod commands;
 mod config;
@@ -12,11 +8,14 @@ mod error_reporting;
 mod onboarding;
 mod task;
 
-use std::{fs, sync::Arc, time::Duration};
+use std::{
+    fs,
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
 use anyhow::Context as _;
 use futures::join;
-use once_cell::sync::Lazy;
 use serenity::all::{FullEvent, GatewayIntents, Ready};
 use shuttle_runtime::SecretStore;
 use shuttle_serenity::SerenityService;
@@ -32,7 +31,7 @@ use crate::{
     error_reporting::{report_error, report_event_handler_error},
 };
 
-static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 pub struct DataInner {
     pub config: Config,
