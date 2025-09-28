@@ -62,7 +62,7 @@ pub(crate) use bail;
 
 pub fn is_http_not_found(err: &serenity::Error) -> bool {
     match err {
-        serenity::Error::Http(inner) => inner.status_code() == Some(http::StatusCode::NOT_FOUND),
+        serenity::Error::Http(err) => err.status_code().is_some_and(|code| code.as_u16() == 404),
         _ => false,
     }
 }

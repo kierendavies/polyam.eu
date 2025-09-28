@@ -8,7 +8,6 @@ publish = false
 anyhow = { version = "1", features = ["backtrace"] }
 chrono = "0.4"
 futures = "0.3"
-http = "0.2"
 iso8601 = { version = "0.6", features = ["serde"] }
 poise = "0.6"
 rand = "0.9"
@@ -26,19 +25,22 @@ serenity = { version = "0.12", default-features = false, features = [
     "rustls_backend",
     "model",
 ] }
-shuttle-runtime = { version = "0.52", default-features = false }
-shuttle-serenity = "0.52"
-shuttle-shared-db = { version = "0.52", features = ["postgres", "sqlx"] }
+shuttle-runtime = { version = "0.57", default-features = false }
+shuttle-serenity = "0.57"
+shuttle-shared-db = { version = "0.57", features = ["postgres", "sqlx"] }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
-toml = "0.8"
+toml = "0.9"
 tracing = "0.1"
 tracing-error = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+
+[profile.dev.package.backtrace]
+opt-level = 3
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
